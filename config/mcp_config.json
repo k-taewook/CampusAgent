@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "task_server": {
+      "description": "과제/할 일 관리 MCP 서버",
+      "module": "mcp_servers.task_server",
+      "tools": [
+        "add_task",
+        "list_tasks",
+        "update_task_status",
+        "delete_task",
+        "get_upcoming_deadlines"
+      ],
+      "status": "active"
+    },
+    "rag_server": {
+      "description": "공지사항 RAG 검색 MCP 서버",
+      "module": "mcp_servers.rag_server",
+      "tools": [],
+      "status": "planned"
+    },
+    "calendar_server": {
+      "description": "캘린더/일정 관리 MCP 서버",
+      "module": "mcp_servers.calendar_server",
+      "tools": [],
+      "status": "planned"
+    }
+  }
+}

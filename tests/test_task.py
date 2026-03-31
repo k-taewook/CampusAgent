@@ -1,0 +1,165 @@
+"""
+CampusAgent - Task CRUD 단위 테스트
+"""
+import pytest
+import os
+import sys
+
+# 프로젝트 루트를 path에 추가
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from database.db import (
+    init_sqlite_db,
+    add_assignment,
+    get_assignments,
+    get_assignment_by_id,
+    update_assignment_status,
+    delete_assignment,
+    get_upcoming_assignments,
+)
+from database.models import AssignmentCreate, AssignmentStatus
+import config.settings as settings
+
+
+# ──────────────────────────────────────
+# Fixture: 테스트용 DB 사용
+# ──────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def setup_test_db(tmp_path):
+    """각 테스트마다 임시 DB 사용"""
+    test_db = str(tmp_path / "test_campus.db")
+    settings.SQLITE_DB_PATH = test_db
+    # db.py 내부의 DB_PATH도 동기화
+    import database.db as db_module
+    db_module.SQLITE_DB_PATH = test_db
+    init_sqlite_db()
+    yield
+    if os.path.exists(test_db):
+        os.remove(test_db)
+
+
+# ──────────────────────────────────────
+# 테스트 케이스
+# ──────────────────────────────────────
+
+class TestAddAssignment:
+    def test_add_basic(self):
+        """기본 과제 추가"""
+        data = AssignmentCreate(
+            title="자료구조 레포트",
+            course_name="자료구조",
+            due_date="2026-04-10",
+        )
+        result = add_assignment(data)
+        assert result.id == 1
+        assert result.title == "자료구조 레포트"
+        assert result.course_name == "자료구조"
+        assert result.status == AssignmentStatus.PENDING
+
+    def test_add_with_all_fields(self):
+        """모든 필드 포함 과제 추가"""
+        data = AssignmentCreate(
+            title="알고리즘 프로젝트",
+            course_name="알고리즘",
+            due_date="2026-04-15",
+            description="분할 정복 알고리즘 구현",
+            priority="high",
+        )
+        result = add_assignment(data)
+        assert result.description == "분할 정복 알고리즘 구현"
+        assert result.priority == "high"
+
+    def test_add_multiple(self):
+        """여러 과제 추가"""
+        for i in range(3):
+            data = AssignmentCreate(
+                title=f"과제 {i+1}",
+                course_name=f"과목 {i+1}",
+                due_date=f"2026-04-{10+i:02d}",
+            )
+            add_assignment(data)
+
+        tasks = get_assignments()
+        assert len(tasks) == 3
+
+
+class TestGetAssignments:
+    def _add_sample_tasks(self):
+        """테스트용 샘플 과제 추가"""
+        samples = [
+            ("자료구조 레포트", "자료구조", "2026-04-10", "pending"),
+            ("알고리즘 퀴즈", "알고리즘", "2026-04-12", "in_progress"),
+            ("DB 과제", "데이터베이스", "2026-04-08", "done"),
+        ]
+        for title, course, due, status in samples:
+            data = AssignmentCreate(title=title, course_name=course, due_date=due)
+            a = add_assignment(data)
+            if status != "pending":
+                update_assignment_status(a.id, status)
+
+    def test_get_all(self):
+        """전체 조회"""
+        self._add_sample_tasks()
+        tasks = get_assignments()
+        assert len(tasks) == 3
+
+    def test_filter_by_status(self):
+        """상태 필터"""
+        self._add_sample_tasks()
+        pending = get_assignments(status="pending")
+        assert len(pending) == 1
+        assert pending[0].title == "자료구조 레포트"
+
+    def test_filter_by_course(self):
+        """과목 필터"""
+        self._add_sample_tasks()
+        algo = get_assignments(course_name="알고리즘")
+        assert len(algo) == 1
+
+
+class TestUpdateStatus:
+    def test_update_to_done(self):
+        """완료 상태로 변경"""
+        data = AssignmentCreate(title="테스트", course_name="과목", due_date="2026-04-10")
+        result = add_assignment(data)
+        updated = update_assignment_status(result.id, "done")
+        assert updated.status == AssignmentStatus.DONE
+
+    def test_update_invalid_status(self):
+        """유효하지 않은 상태"""
+        data = AssignmentCreate(title="테스트", course_name="과목", due_date="2026-04-10")
+        result = add_assignment(data)
+        with pytest.raises(ValueError):
+            update_assignment_status(result.id, "invalid")
+
+    def test_update_nonexistent(self):
+        """존재하지 않는 과제"""
+        result = update_assignment_status(9999, "done")
+        assert result is None
+
+
+class TestDeleteAssignment:
+    def test_delete_existing(self):
+        """존재하는 과제 삭제"""
+        data = AssignmentCreate(title="삭제 테스트", course_name="과목", due_date="2026-04-10")
+        result = add_assignment(data)
+        assert delete_assignment(result.id) is True
+        assert get_assignment_by_id(result.id) is None
+
+    def test_delete_nonexistent(self):
+        """존재하지 않는 과제 삭제"""
+        assert delete_assignment(9999) is False
+
+
+class TestGetById:
+    def test_found(self):
+        data = AssignmentCreate(title="조회 테스트", course_name="과목", due_date="2026-04-10")
+        result = add_assignment(data)
+        found = get_assignment_by_id(result.id)
+        assert found is not None
+        assert found.title == "조회 테스트"
+
+    def test_not_found(self):
+        found = get_assignment_by_id(9999)
+        assert found is None
