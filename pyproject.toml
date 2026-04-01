@@ -1,12 +1,13 @@
 [project]
 name = "campus-agent"
-version = "0.1.0"
-description = "대학생 특화 LLM+MCP 로컬 어시스턴트"
+version = "0.3.0"
+description = "대학생 특화 LLM+MCP 로컬 어시스턴트 (Gemini/OpenAI 지원)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "langchain-core>=0.1.0",
     "langchain-openai>=0.0.8",
+    "langchain-google-genai>=2.0.0",
     "langgraph>=0.0.26",
     "chromadb>=0.4.22",
     "pydantic>=2.5.3",

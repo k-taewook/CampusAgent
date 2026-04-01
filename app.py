@@ -13,7 +13,7 @@ from database.db import (
     get_dday_schedules,
 )
 from rag.retriever import init_chromadb, get_notice_count
-from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION, is_llm_available
+from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION, is_llm_available, get_llm_provider, get_llm_model
 
 # 환경변수 로딩
 load_dotenv()
@@ -37,10 +37,13 @@ with st.sidebar:
 
     # API 키 상태 표시
     if is_llm_available():
-        st.success("✅ LLM 연결됨", icon="🤖")
+        provider = get_llm_provider()
+        model_name = get_llm_model()
+        provider_label = "Gemini" if provider == "gemini" else "OpenAI"
+        st.success(f"✅ {provider_label} 연결됨 ({model_name})", icon="🤖")
     else:
-        st.warning("⚠️ OPENAI_API_KEY 미설정", icon="🔑")
-        st.caption("`.env` 파일에 키를 추가해주세요.")
+        st.warning("⚠️ LLM API 키 미설정", icon="🔑")
+        st.caption("`.env`에 `GOOGLE_API_KEY` 또는 `OPENAI_API_KEY`를 추가해주세요.")
 
     st.divider()
 
@@ -152,6 +155,16 @@ if prompt := st.chat_input("과제, 일정, 공지사항 등에 대해 편하게
                             last_message = node_state["messages"][-1]
                             if last_message.type == "ai" and last_message.content:
                                 last_msg_content = last_message.content
+
+                if isinstance(last_msg_content, list):
+                    # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
+                    parsed_text = ""
+                    for item in last_msg_content:
+                        if isinstance(item, dict) and "text" in item:
+                            parsed_text += item["text"]
+                        elif isinstance(item, str):
+                            parsed_text += item
+                    last_msg_content = parsed_text
 
                 if last_msg_content:
                     st.markdown(last_msg_content)
