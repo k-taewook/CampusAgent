@@ -2,13 +2,17 @@
 CampusAgent SQLite 데이터베이스 모듈
 - 테이블 초기화
 - 과제 CRUD 함수 (추가, 조회, 수정, 삭제)
+- 캘린더 CRUD 함수 (추가, 조회, 수정, 삭제)
 """
 import sqlite3
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from config.settings import SQLITE_DB_PATH
-from database.models import Assignment, AssignmentCreate, AssignmentStatus
+from database.models import (
+    Assignment, AssignmentCreate, AssignmentStatus,
+    Schedule, ScheduleCreate,
+)
 
 
 def _get_connection() -> sqlite3.Connection:
@@ -41,6 +45,20 @@ def init_sqlite_db():
     CREATE TABLE IF NOT EXISTS user_settings (
         key TEXT PRIMARY KEY,
         value TEXT
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        start_time TEXT,
+        end_time TEXT,
+        category TEXT DEFAULT 'personal',
+        description TEXT,
+        is_recurring INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
     """)
 
@@ -169,6 +187,133 @@ def _row_to_assignment(row: sqlite3.Row) -> Assignment:
         due_date=row["due_date"],
         status=row["status"],
         priority=row["priority"] if row["priority"] else "medium",
+        created_at=row["created_at"],
+    )
+
+
+# ──────────────────────────────────────
+# 캘린더 / 일정 CRUD
+# ──────────────────────────────────────
+
+
+def add_schedule(data: ScheduleCreate) -> Schedule:
+    """일정 추가"""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO schedules (title, date, start_time, end_time, category, description, is_recurring)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data.title, data.date, data.start_time, data.end_time,
+            data.category, data.description, 1 if data.is_recurring else 0,
+        ),
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    row = cursor.execute("SELECT * FROM schedules WHERE id = ?", (new_id,)).fetchone()
+    conn.close()
+    return _row_to_schedule(row)
+
+
+def get_schedules(
+    category: Optional[str] = None,
+    date: Optional[str] = None,
+) -> List[Schedule]:
+    """일정 목록 조회 (필터 옵션)"""
+    conn = _get_connection()
+    query = "SELECT * FROM schedules WHERE 1=1"
+    params: list = []
+
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    if date:
+        query += " AND date = ?"
+        params.append(date)
+
+    query += " ORDER BY date ASC, start_time ASC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [_row_to_schedule(r) for r in rows]
+
+
+def get_schedules_by_date_range(start_date: str, end_date: str) -> List[Schedule]:
+    """날짜 범위로 일정 조회"""
+    conn = _get_connection()
+    rows = conn.execute(
+        "SELECT * FROM schedules WHERE date BETWEEN ? AND ? ORDER BY date ASC, start_time ASC",
+        (start_date, end_date),
+    ).fetchall()
+    conn.close()
+    return [_row_to_schedule(r) for r in rows]
+
+
+def get_today_schedules() -> List[Schedule]:
+    """오늘 일정 조회"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return get_schedules(date=today)
+
+
+def delete_schedule(schedule_id: int) -> bool:
+    """일정 삭제"""
+    conn = _get_connection()
+    cursor = conn.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    conn.commit()
+    deleted = cursor.rowcount > 0
+    conn.close()
+    return deleted
+
+
+def get_schedule_by_id(schedule_id: int) -> Optional[Schedule]:
+    """ID로 일정 조회"""
+    conn = _get_connection()
+    row = conn.execute("SELECT * FROM schedules WHERE id = ?", (schedule_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return _row_to_schedule(row)
+
+
+def get_dday_schedules(category: Optional[str] = "exam") -> List[dict]:
+    """D-day 계산이 포함된 일정 조회 (기본: 시험)"""
+    conn = _get_connection()
+    query = "SELECT * FROM schedules WHERE date >= ? "
+    params: list = [datetime.now().strftime("%Y-%m-%d")]
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    query += " ORDER BY date ASC"
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    results = []
+    today = datetime.now().date()
+    for r in rows:
+        schedule = _row_to_schedule(r)
+        target = datetime.strptime(schedule.date, "%Y-%m-%d").date()
+        d_day = (target - today).days
+        results.append({
+            "schedule": schedule,
+            "d_day": d_day,
+            "display": f"{'D-day' if d_day == 0 else f'D-{d_day}'} | {schedule.title} ({schedule.date})",
+        })
+    return results
+
+
+def _row_to_schedule(row: sqlite3.Row) -> Schedule:
+    """sqlite3.Row → Schedule Pydantic 모델 변환"""
+    return Schedule(
+        id=row["id"],
+        title=row["title"],
+        date=row["date"],
+        start_time=row["start_time"],
+        end_time=row["end_time"],
+        category=row["category"] if row["category"] else "personal",
+        description=row["description"],
+        is_recurring=bool(row["is_recurring"]),
         created_at=row["created_at"],
     )
 

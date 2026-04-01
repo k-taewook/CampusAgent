@@ -1,6 +1,6 @@
 """
 CampusAgent LangGraph 에이전트 그래프
-- LLM + Tool 바인딩
+- LLM + 전체 Tool 바인딩 (Task + Calendar + RAG)
 - agent → should_continue → tools → agent 순환 구조
 """
 import os
@@ -13,6 +13,11 @@ from agent.state import AgentState
 from agent.prompts import SYSTEM_PROMPT
 from config.settings import LLM_MODEL, LLM_TEMPERATURE, is_llm_available
 from mcp_servers.task_server import TASK_TOOLS
+from mcp_servers.calendar_server import CALENDAR_TOOLS
+from mcp_servers.rag_server import RAG_TOOLS
+
+# 전체 도구 리스트 통합
+ALL_TOOLS = TASK_TOOLS + CALENDAR_TOOLS + RAG_TOOLS
 
 
 def build_graph():
@@ -26,8 +31,9 @@ def build_graph():
     if is_llm_available():
         try:
             base_model = ChatOpenAI(model=LLM_MODEL, temperature=LLM_TEMPERATURE)
-            # Tool 바인딩 — Agent가 도구 호출 가능하게 함
-            model = base_model.bind_tools(TASK_TOOLS)
+            # 전체 Tool 바인딩 — Agent가 모든 도구 호출 가능
+            model = base_model.bind_tools(ALL_TOOLS)
+            print(f"✅ LLM 초기화 완료 (모델: {LLM_MODEL}, 도구: {len(ALL_TOOLS)}개)")
         except Exception as e:
             print(f"⚠️ LLM 초기화 실패: {e}")
 
@@ -45,7 +51,7 @@ def build_graph():
                     "⚠️ OPENAI_API_KEY가 설정되지 않았습니다.\n\n"
                     "`.env` 파일에 다음을 추가해주세요:\n"
                     "```\nOPENAI_API_KEY=sk-your-key-here\n```\n\n"
-                    "설정 후 앱을 재실행하면 과제 관리 기능을 사용할 수 있습니다! 🎓"
+                    "설정 후 앱을 재실행하면 모든 기능을 사용할 수 있습니다! 🎓"
                 )
             )
 
@@ -63,7 +69,7 @@ def build_graph():
 
     # ── 5. 노드 등록 ──
     builder.add_node("agent", call_model)
-    builder.add_node("tools", ToolNode(TASK_TOOLS))
+    builder.add_node("tools", ToolNode(ALL_TOOLS))
 
     # ── 6. 엣지 연결 ──
     builder.add_edge(START, "agent")

@@ -60,3 +60,64 @@ class UserSetting(BaseModel):
     """사용자 설정 모델"""
     key: str
     value: str
+
+
+# ──────────────────────────────────────
+# 캘린더 / 일정 모델
+# ──────────────────────────────────────
+
+
+class ScheduleCategory(str, Enum):
+    """일정 카테고리 열거형"""
+    CLASS = "class"          # 수업
+    EXAM = "exam"            # 시험
+    PERSONAL = "personal"    # 개인 일정
+    MEETING = "meeting"      # 모임/회의
+    OTHER = "other"          # 기타
+
+
+class ScheduleCreate(BaseModel):
+    """일정 생성 요청 모델"""
+    title: str = Field(..., description="일정 제목")
+    date: str = Field(..., description="일정 날짜 (YYYY-MM-DD 형식)")
+    start_time: Optional[str] = Field(None, description="시작 시간 (HH:MM 형식)")
+    end_time: Optional[str] = Field(None, description="종료 시간 (HH:MM 형식)")
+    category: Optional[str] = Field("personal", description="카테고리 (class/exam/personal/meeting/other)")
+    description: Optional[str] = Field(None, description="일정 상세 설명")
+    is_recurring: Optional[bool] = Field(False, description="매주 반복 여부")
+
+
+class Schedule(BaseModel):
+    """일정 전체 모델 (DB 조회 결과)"""
+    id: int
+    title: str
+    date: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: str = "personal"
+    description: Optional[str] = None
+    is_recurring: bool = False
+    created_at: Optional[str] = None
+
+    def to_display_string(self) -> str:
+        """채팅 응답용 문자열 변환"""
+        cat_emoji = {
+            "class": "📖", "exam": "📝", "personal": "👤",
+            "meeting": "👥", "other": "📌",
+        }
+        emoji = cat_emoji.get(self.category, "📌")
+        time_str = ""
+        if self.start_time:
+            time_str = f"   🕐 시간: {self.start_time}"
+            if self.end_time:
+                time_str += f" ~ {self.end_time}"
+            time_str += "\n"
+        recurring = "   🔁 매주 반복\n" if self.is_recurring else ""
+
+        return (
+            f"{emoji} **[{self.id}] {self.title}**\n"
+            f"   📅 날짜: {self.date}\n"
+            f"{time_str}"
+            f"   📂 카테고리: {self.category}\n"
+            f"{recurring}"
+        ).rstrip()

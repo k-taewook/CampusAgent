@@ -1,0 +1,470 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.7, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, langsmith-0.7.22
+collecting ... collected 8 items
+
+tests/test_rag.py::TestLoader::test_load_sample_json PASSED              [ 12%]
+tests/test_rag.py::TestLoader::test_load_nonexistent PASSED              [ 25%]
+tests/test_rag.py::TestChunker::test_short_text PASSED                   [ 37%]
+tests/test_rag.py::TestChunker::test_long_text PASSED                    [ 50%]
+tests/test_rag.py::TestChunker::test_split_documents PASSED              [ 62%]
+tests/test_rag.py::TestEmbedder::test_embed_and_store PASSED             [ 75%]
+tests/test_rag.py::TestEmbedder::test_embed_and_store ERROR              [ 75%]
+tests/test_rag.py::TestEmbedder::test_empty_store PASSED                 [ 87%]
+tests/test_rag.py::TestEmbedder::test_empty_store ERROR                  [ 87%]
+tests/test_rag.py::TestFullPipeline::test_load_chunk_embed_search PASSED [100%]
+tests/test_rag.py::TestFullPipeline::test_load_chunk_embed_search ERROR  [100%]
+
+=================================== ERRORS ====================================
+___________ ERROR at teardown of TestEmbedder.test_embed_and_store ____________
+
+tmp_path = WindowsPath('C:/Users/kimka/AppData/Local/Temp/pytest-of-kimka/pytest-3/test_embed_and_store0')
+
+    @pytest.fixture(autouse=True)
+    def setup_test_chroma(tmp_path):
+        """테스트용 임시 ChromaDB 사용"""
+        test_chroma = str(tmp_path / "test_chroma")
+        settings.CHROMA_DB_DIR = test_chroma
+        # embedder와 retriever가 사용하는 경로도 동기화
+        import rag.embedder as emb
+        import rag.retriever as ret
+        emb.CHROMA_DB_DIR = test_chroma
+        ret.CHROMA_DB_DIR = test_chroma
+        yield
+        if os.path.exists(test_chroma):
+>           shutil.rmtree(test_chroma)
+
+tests\test_rag.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_embed_and_store0\\test_chroma'
+ignore_errors = False, onerror = None
+
+    def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
+        """Recursively delete a directory tree.
+    
+        If dir_fd is not None, it should be a file descriptor open to a directory;
+        path will then be relative to that directory.
+        dir_fd may not be implemented on your platform.
+        If it is unavailable, using it will raise a NotImplementedError.
+    
+        If ignore_errors is set, errors are ignored; otherwise, if onexc or
+        onerror is set, it is called to handle the error with arguments (func,
+        path, exc_info) where func is platform and implementation dependent;
+        path is the argument to that function that caused it to fail; and
+        the value of exc_info describes the exception. For onexc it is the
+        exception instance, and for onerror it is a tuple as returned by
+        sys.exc_info().  If ignore_errors is false and both onexc and
+        onerror are None, the exception is reraised.
+    
+        onerror is deprecated and only remains for backwards compatibility.
+        If both onerror and onexc are set, onerror is ignored and onexc is used.
+        """
+    
+        sys.audit("shutil.rmtree", path, dir_fd)
+        if ignore_errors:
+            def onexc(*args):
+                pass
+        elif onerror is None and onexc is None:
+            def onexc(*args):
+                raise
+        elif onexc is None:
+            if onerror is None:
+                def onexc(*args):
+                    raise
+            else:
+                # delegate to onerror
+                def onexc(*args):
+                    func, path, exc = args
+                    if exc is None:
+                        exc_info = None, None, None
+                    else:
+                        exc_info = type(exc), exc, exc.__traceback__
+                    return onerror(func, path, exc_info)
+    
+        if _use_fd_functions:
+            # While the unsafe rmtree works fine on bytes, the fd based does not.
+            if isinstance(path, bytes):
+                path = os.fsdecode(path)
+            stack = [(os.lstat, dir_fd, path, None)]
+            try:
+                while stack:
+                    _rmtree_safe_fd(stack, onexc)
+            finally:
+                # Close any file descriptors still on the stack.
+                while stack:
+                    func, fd, path, entry = stack.pop()
+                    if func is not os.close:
+                        continue
+                    try:
+                        os.close(fd)
+                    except OSError as err:
+                        onexc(os.close, path, err)
+        else:
+            if dir_fd is not None:
+                raise NotImplementedError("dir_fd unavailable on this platform")
+            try:
+                if _rmtree_islink(path):
+                    # symlinks to directories are forbidden, see bug #1669
+                    raise OSError("Cannot call rmtree on a symbolic link")
+            except OSError as err:
+                onexc(os.path.islink, path, err)
+                # can't continue even if onexc hook returns
+                return
+>           return _rmtree_unsafe(path, onexc)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\..\..\anaconda3\Lib\shutil.py:781: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_embed_and_store0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B5DBF60>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.unlink(fullname)
+                except OSError as err:
+>                   onexc(os.unlink, fullname, err)
+
+..\..\..\..\anaconda3\Lib\shutil.py:635: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_embed_and_store0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B5DBF60>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+>                   os.unlink(fullname)
+E                   PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_embed_and_store0\\test_chroma\\e159ff45-211d-4498-bc86-ed56b2ef067a\\data_level0.bin'
+
+..\..\..\..\anaconda3\Lib\shutil.py:633: PermissionError
+---------------------------- Captured stdout call -----------------------------
+\U0001f4be 2\uac1c \ubb38\uc11c ChromaDB \uc800\uc7a5 \uc644\ub8cc (\ucd1d \ubb38\uc11c: 2)
+_____________ ERROR at teardown of TestEmbedder.test_empty_store ______________
+
+tmp_path = WindowsPath('C:/Users/kimka/AppData/Local/Temp/pytest-of-kimka/pytest-3/test_empty_store0')
+
+    @pytest.fixture(autouse=True)
+    def setup_test_chroma(tmp_path):
+        """테스트용 임시 ChromaDB 사용"""
+        test_chroma = str(tmp_path / "test_chroma")
+        settings.CHROMA_DB_DIR = test_chroma
+        # embedder와 retriever가 사용하는 경로도 동기화
+        import rag.embedder as emb
+        import rag.retriever as ret
+        emb.CHROMA_DB_DIR = test_chroma
+        ret.CHROMA_DB_DIR = test_chroma
+        yield
+        if os.path.exists(test_chroma):
+>           shutil.rmtree(test_chroma)
+
+tests\test_rag.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_empty_store0\\test_chroma'
+ignore_errors = False, onerror = None
+
+    def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
+        """Recursively delete a directory tree.
+    
+        If dir_fd is not None, it should be a file descriptor open to a directory;
+        path will then be relative to that directory.
+        dir_fd may not be implemented on your platform.
+        If it is unavailable, using it will raise a NotImplementedError.
+    
+        If ignore_errors is set, errors are ignored; otherwise, if onexc or
+        onerror is set, it is called to handle the error with arguments (func,
+        path, exc_info) where func is platform and implementation dependent;
+        path is the argument to that function that caused it to fail; and
+        the value of exc_info describes the exception. For onexc it is the
+        exception instance, and for onerror it is a tuple as returned by
+        sys.exc_info().  If ignore_errors is false and both onexc and
+        onerror are None, the exception is reraised.
+    
+        onerror is deprecated and only remains for backwards compatibility.
+        If both onerror and onexc are set, onerror is ignored and onexc is used.
+        """
+    
+        sys.audit("shutil.rmtree", path, dir_fd)
+        if ignore_errors:
+            def onexc(*args):
+                pass
+        elif onerror is None and onexc is None:
+            def onexc(*args):
+                raise
+        elif onexc is None:
+            if onerror is None:
+                def onexc(*args):
+                    raise
+            else:
+                # delegate to onerror
+                def onexc(*args):
+                    func, path, exc = args
+                    if exc is None:
+                        exc_info = None, None, None
+                    else:
+                        exc_info = type(exc), exc, exc.__traceback__
+                    return onerror(func, path, exc_info)
+    
+        if _use_fd_functions:
+            # While the unsafe rmtree works fine on bytes, the fd based does not.
+            if isinstance(path, bytes):
+                path = os.fsdecode(path)
+            stack = [(os.lstat, dir_fd, path, None)]
+            try:
+                while stack:
+                    _rmtree_safe_fd(stack, onexc)
+            finally:
+                # Close any file descriptors still on the stack.
+                while stack:
+                    func, fd, path, entry = stack.pop()
+                    if func is not os.close:
+                        continue
+                    try:
+                        os.close(fd)
+                    except OSError as err:
+                        onexc(os.close, path, err)
+        else:
+            if dir_fd is not None:
+                raise NotImplementedError("dir_fd unavailable on this platform")
+            try:
+                if _rmtree_islink(path):
+                    # symlinks to directories are forbidden, see bug #1669
+                    raise OSError("Cannot call rmtree on a symbolic link")
+            except OSError as err:
+                onexc(os.path.islink, path, err)
+                # can't continue even if onexc hook returns
+                return
+>           return _rmtree_unsafe(path, onexc)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\..\..\anaconda3\Lib\shutil.py:781: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_empty_store0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B674540>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.unlink(fullname)
+                except OSError as err:
+>                   onexc(os.unlink, fullname, err)
+
+..\..\..\..\anaconda3\Lib\shutil.py:635: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_empty_store0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B674540>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+>                   os.unlink(fullname)
+E                   PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_empty_store0\\test_chroma\\chroma.sqlite3'
+
+..\..\..\..\anaconda3\Lib\shutil.py:633: PermissionError
+---------------------------- Captured stdout call -----------------------------
+\u26a0\ufe0f \uc800\uc7a5\ud560 \ubb38\uc11c\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.
+_____ ERROR at teardown of TestFullPipeline.test_load_chunk_embed_search ______
+
+tmp_path = WindowsPath('C:/Users/kimka/AppData/Local/Temp/pytest-of-kimka/pytest-3/test_load_chunk_embed_search0')
+
+    @pytest.fixture(autouse=True)
+    def setup_test_chroma(tmp_path):
+        """테스트용 임시 ChromaDB 사용"""
+        test_chroma = str(tmp_path / "test_chroma")
+        settings.CHROMA_DB_DIR = test_chroma
+        # embedder와 retriever가 사용하는 경로도 동기화
+        import rag.embedder as emb
+        import rag.retriever as ret
+        emb.CHROMA_DB_DIR = test_chroma
+        ret.CHROMA_DB_DIR = test_chroma
+        yield
+        if os.path.exists(test_chroma):
+>           shutil.rmtree(test_chroma)
+
+tests\test_rag.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_load_chunk_embed_search0\\test_chroma'
+ignore_errors = False, onerror = None
+
+    def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
+        """Recursively delete a directory tree.
+    
+        If dir_fd is not None, it should be a file descriptor open to a directory;
+        path will then be relative to that directory.
+        dir_fd may not be implemented on your platform.
+        If it is unavailable, using it will raise a NotImplementedError.
+    
+        If ignore_errors is set, errors are ignored; otherwise, if onexc or
+        onerror is set, it is called to handle the error with arguments (func,
+        path, exc_info) where func is platform and implementation dependent;
+        path is the argument to that function that caused it to fail; and
+        the value of exc_info describes the exception. For onexc it is the
+        exception instance, and for onerror it is a tuple as returned by
+        sys.exc_info().  If ignore_errors is false and both onexc and
+        onerror are None, the exception is reraised.
+    
+        onerror is deprecated and only remains for backwards compatibility.
+        If both onerror and onexc are set, onerror is ignored and onexc is used.
+        """
+    
+        sys.audit("shutil.rmtree", path, dir_fd)
+        if ignore_errors:
+            def onexc(*args):
+                pass
+        elif onerror is None and onexc is None:
+            def onexc(*args):
+                raise
+        elif onexc is None:
+            if onerror is None:
+                def onexc(*args):
+                    raise
+            else:
+                # delegate to onerror
+                def onexc(*args):
+                    func, path, exc = args
+                    if exc is None:
+                        exc_info = None, None, None
+                    else:
+                        exc_info = type(exc), exc, exc.__traceback__
+                    return onerror(func, path, exc_info)
+    
+        if _use_fd_functions:
+            # While the unsafe rmtree works fine on bytes, the fd based does not.
+            if isinstance(path, bytes):
+                path = os.fsdecode(path)
+            stack = [(os.lstat, dir_fd, path, None)]
+            try:
+                while stack:
+                    _rmtree_safe_fd(stack, onexc)
+            finally:
+                # Close any file descriptors still on the stack.
+                while stack:
+                    func, fd, path, entry = stack.pop()
+                    if func is not os.close:
+                        continue
+                    try:
+                        os.close(fd)
+                    except OSError as err:
+                        onexc(os.close, path, err)
+        else:
+            if dir_fd is not None:
+                raise NotImplementedError("dir_fd unavailable on this platform")
+            try:
+                if _rmtree_islink(path):
+                    # symlinks to directories are forbidden, see bug #1669
+                    raise OSError("Cannot call rmtree on a symbolic link")
+            except OSError as err:
+                onexc(os.path.islink, path, err)
+                # can't continue even if onexc hook returns
+                return
+>           return _rmtree_unsafe(path, onexc)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+..\..\..\..\anaconda3\Lib\shutil.py:781: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_load_chunk_embed_search0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B674E00>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.unlink(fullname)
+                except OSError as err:
+>                   onexc(os.unlink, fullname, err)
+
+..\..\..\..\anaconda3\Lib\shutil.py:635: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_load_chunk_embed_search0\\test_chroma'
+onexc = <function rmtree.<locals>.onexc at 0x000001DD8B674E00>
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+>                   os.unlink(fullname)
+E                   PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\Users\\kimka\\AppData\\Local\\Temp\\pytest-of-kimka\\pytest-3\\test_load_chunk_embed_search0\\test_chroma\\005a162b-2749-4db2-8130-cd6314e6a32e\\data_level0.bin'
+
+..\..\..\..\anaconda3\Lib\shutil.py:633: PermissionError
+---------------------------- Captured stdout call -----------------------------
+\U0001f4c4 10\uac1c\uc758 \uacf5\uc9c0\uc0ac\ud56d \ub85c\ub4dc \uc644\ub8cc (C:\\Users\\kimka\\OneDrive\\Documents\\GitHub\\CampusAgent\\tests\\..\\data\\sample_notices.json)\n\u2702\ufe0f 10\uac1c \ubb38\uc11c \u2192 10\uac1c \uccad\ud06c\ub85c \ubd84\ud560 \uc644\ub8cc\n\U0001f4be 10\uac1c \ubb38\uc11c ChromaDB \uc800\uc7a5 \uc644\ub8cc (\ucd1d \ubb38\uc11c: 10)
+=========================== short test summary info ===========================
+ERROR tests/test_rag.py::TestEmbedder::test_embed_and_store - PermissionError...
+ERROR tests/test_rag.py::TestEmbedder::test_empty_store - PermissionError: [W...
+ERROR tests/test_rag.py::TestFullPipeline::test_load_chunk_embed_search - Per...
+========================= 8 passed, 3 errors in 2.67s =========================
