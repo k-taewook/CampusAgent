@@ -2,10 +2,11 @@
 CampusAgent 데이터 모델 정의
 - Pydantic 기반 스키마 (직렬화/역직렬화 지원)
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 from enum import Enum
+import re
 
 
 class AssignmentStatus(str, Enum):
@@ -23,6 +24,20 @@ class AssignmentCreate(BaseModel):
     description: Optional[str] = Field(None, description="과제 상세 설명")
     due_date: str = Field(..., description="마감일 (YYYY-MM-DD HH:MM 형식)")
     priority: Optional[str] = Field("medium", description="우선순위 (low/medium/high)")
+
+    @field_validator('title')
+    @classmethod
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('title is required and cannot be empty')
+        return v.strip()
+
+    @field_validator('due_date')
+    @classmethod
+    def validate_due_date(cls, v):
+        if not re.match(r'^\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?$', v.strip()):
+            raise ValueError('due_date must be in absolute YYYY-MM-DD or YYYY-MM-DD HH:MM format')
+        return v.strip()
 
 
 class Assignment(BaseModel):
@@ -85,6 +100,20 @@ class ScheduleCreate(BaseModel):
     category: Optional[str] = Field("personal", description="카테고리 (class/exam/personal/meeting/other)")
     description: Optional[str] = Field(None, description="일정 상세 설명")
     is_recurring: Optional[bool] = Field(False, description="매주 반복 여부")
+
+    @field_validator('title')
+    @classmethod
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('title is required and cannot be empty')
+        return v.strip()
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v):
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', v.strip()):
+            raise ValueError('date must be in absolute YYYY-MM-DD format')
+        return v.strip()
 
 
 class Schedule(BaseModel):

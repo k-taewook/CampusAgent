@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "backend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8501",
+  "backendAuthType": "public",
+  "executionArgs": {
+    "projectName": "CampusAgent",
+    "projectPath": "c:\\Users\\kimka\\OneDrive\\Documents\\GitHub\\CampusAgent",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-OJzNmZEvUk3AgqirlpaCamAuEAhLt_Q0ZcdTcrEDMChXAJCYiglG0qgymh221szyVQErLaRv2sAxTEbzzdRBTRrgceV5vzznCZ6HXKVfwiJo_Xs5X_EM0tnylrX8CngOa30"
+    }
+  },
+  "serverPort": 57729,
+  "proxy": "http://bf0d6564-6ea3-43be-9dd8-04837ba82064:pPgyuWzZeO18Ybn0fUe7HuN38oZjLeMD@tun.testsprite.com:8080"
+}

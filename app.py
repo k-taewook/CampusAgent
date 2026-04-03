@@ -140,15 +140,23 @@ if prompt := st.chat_input("과제, 일정, 공지사항 등에 대해 편하게
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # LangGraph 호출
+    # LangGraph 호출시 고유 세션 ID 및 컨텍스트 전달
+    from datetime import datetime
+    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     config = {"configurable": {"thread_id": "streamlit_session"}}
 
     with st.chat_message("assistant"):
         with st.spinner("CampusAgent가 생각 중... 🤔"):
             last_msg_content = ""
             try:
+                # AgentState에 맞춰서 messages와 current_context 전달
+                # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
                 for event in st.session_state.graph.stream(
-                    {"messages": [("user", prompt)]}, config
+                    {
+                        "messages": [("user", prompt)],
+                        "current_context": {"current_time": current_time_str}
+                    }, 
+                    config
                 ):
                     for node_name, node_state in event.items():
                         if "messages" in node_state and node_state["messages"]:

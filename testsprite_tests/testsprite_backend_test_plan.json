@@ -1,0 +1,32 @@
+[
+  {
+    "id": "TC001",
+    "title": "post task with valid absolute date",
+    "description": "Test creating a task with a valid absolute due_date string to ensure the task is created successfully and a task ID is returned."
+  },
+  {
+    "id": "TC002",
+    "title": "post task with empty title",
+    "description": "Test creating a task with an empty title field to verify that the API returns a 400 validation error indicating that the title is required."
+  },
+  {
+    "id": "TC003",
+    "title": "post task with relative due date",
+    "description": "Test creating a task with a relative due_date string (e.g., next Wednesday) to verify that the task is created and the due_date is parsed correctly or errors are surfaced if parsing fails."
+  },
+  {
+    "id": "TC004",
+    "title": "post calendar event with valid iso date",
+    "description": "Test creating a calendar event with a valid ISO date string to ensure the event is created successfully and an event ID is returned."
+  },
+  {
+    "id": "TC005",
+    "title": "post calendar event with ambiguous date string",
+    "description": "Test creating a calendar event with an ambiguous date string (e.g., next month on 31st) to verify that the API returns a 400 parsing error indicating the date is ambiguous."
+  },
+  {
+    "id": "TC006",
+    "title": "post calendar event with relative date crossing month boundary",
+    "description": "Test creating a calendar event with a relative date string that crosses a month boundary (e.g., next Wednesday) to verify that the date is parsed and normalized correctly or errors are detected if the stored date is incorrect."
+  }
+]

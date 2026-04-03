@@ -1,0 +1,43 @@
+version: "2"
+type: backend
+tech_stack:
+  - Python
+  - LangGraph
+  - Streamlit
+  - SQLite
+  - ChromaDB
+features:
+  - name: Task Management
+    description: CRUD operations for assignments
+    files:
+      - mcp_servers/task_server.py
+      - database/db.py
+    endpoints:
+      - method: POST
+        path: /task
+        description: Create a task
+        auth_required: false
+        request_schema:
+          body:
+            title: string
+            course: string
+            due_date: string
+        response_schema:
+          "200": string
+  - name: Calendar Management
+    description: CRUD operations for schedule events
+    files:
+      - mcp_servers/calendar_server.py
+      - database/db.py
+    endpoints:
+      - method: POST
+        path: /calendar
+        description: Create calendar event
+        auth_required: false
+        request_schema:
+          body:
+            title: string
+            date_str: string
+        response_schema:
+          "200": string
+known_limitations: []
