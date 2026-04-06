@@ -68,6 +68,29 @@ def init_sqlite_db():
 
 
 # ──────────────────────────────────────
+# 사용자 설정 CRUD
+# ──────────────────────────────────────
+
+def set_user_setting(key: str, value: str):
+    """사용자 설정 저장 (Upsert)"""
+    conn = _get_connection()
+    conn.execute(
+        "INSERT INTO user_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value)
+    )
+    conn.commit()
+    conn.close()
+
+def get_user_setting(key: str, default: str = "") -> str:
+    """사용자 설정 조회"""
+    conn = _get_connection()
+    row = conn.execute("SELECT value FROM user_settings WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    if row:
+        return row["value"]
+    return default
+
+# ──────────────────────────────────────
 # 과제 CRUD
 # ──────────────────────────────────────
 

@@ -11,8 +11,14 @@ from database.db import (
     get_upcoming_assignments,
     get_today_schedules,
     get_dday_schedules,
+    get_schedules,
+    get_user_setting,
+    set_user_setting,
+    update_assignment_status,
 )
 from rag.retriever import init_chromadb, get_notice_count
+import pandas as pd
+from collections import defaultdict
 from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION, is_llm_available, get_llm_provider, get_llm_model
 
 # 환경변수 로딩
@@ -116,7 +122,7 @@ with st.sidebar:
     )
 
 # ──────────────────────────────────────
-# 메인 영역
+# 메인 영역 (Tabs)
 # ──────────────────────────────────────
 st.title("🎓 CampusAgent")
 st.subheader("대학생 특화 로컬 AI 어시스턴트")
@@ -129,63 +135,175 @@ if "graph" not in st.session_state:
     init_chromadb()
     st.session_state.graph = build_graph()
 
-# 이전 메시지 출력
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+tab_chat, tab_dashboard, tab_calendar, tab_settings = st.tabs(["💬 챗봇", "📊 과제 대시보드", "📅 캘린더", "⚙️ 설정"])
 
-# 사용자 입력
-if prompt := st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓"):
-    # 사용자 메시지 표시
-    st.chat_message("user").markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+with tab_chat:
+    # 이전 메시지 출력
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-    # LangGraph 호출시 고유 세션 ID 및 컨텍스트 전달
-    from datetime import datetime
-    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    config = {"configurable": {"thread_id": "streamlit_session"}}
+    # 사용자 입력
+    if prompt := st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓"):
+        # 사용자 메시지 표시
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.chat_message("assistant"):
-        with st.spinner("CampusAgent가 생각 중... 🤔"):
-            last_msg_content = ""
-            try:
-                # AgentState에 맞춰서 messages와 current_context 전달
-                # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
-                for event in st.session_state.graph.stream(
-                    {
-                        "messages": [("user", prompt)],
-                        "current_context": {"current_time": current_time_str}
-                    }, 
-                    config
-                ):
-                    for node_name, node_state in event.items():
-                        if "messages" in node_state and node_state["messages"]:
-                            last_message = node_state["messages"][-1]
-                            if last_message.type == "ai" and last_message.content:
-                                last_msg_content = last_message.content
+        from datetime import datetime
+        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user_major_ctx = get_user_setting("major", "미설정")
+        user_grade_ctx = get_user_setting("grade", "미설정")
+        config = {"configurable": {"thread_id": "streamlit_session"}}
 
-                if isinstance(last_msg_content, list):
-                    # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
-                    parsed_text = ""
-                    for item in last_msg_content:
-                        if isinstance(item, dict) and "text" in item:
-                            parsed_text += item["text"]
-                        elif isinstance(item, str):
-                            parsed_text += item
-                    last_msg_content = parsed_text
+        with st.chat_message("assistant"):
+            with st.spinner("CampusAgent가 생각 중... 🤔"):
+                last_msg_content = ""
+                try:
+                    # AgentState에 맞춰서 messages와 current_context 전달
+                    # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
+                    for event in st.session_state.graph.stream(
+                        {
+                            "messages": [("user", prompt)],
+                            "current_context": {
+                                "current_time": current_time_str,
+                                "user_major": user_major_ctx,
+                                "user_grade": user_grade_ctx
+                            }
+                        }, 
+                        config
+                    ):
+                        for node_name, node_state in event.items():
+                            if "messages" in node_state and node_state["messages"]:
+                                last_message = node_state["messages"][-1]
+                                if last_message.type == "ai" and last_message.content:
+                                    last_msg_content = last_message.content
 
-                if last_msg_content:
-                    st.markdown(last_msg_content)
-                else:
-                    last_msg_content = "처리가 완료되었지만 응답 내용이 비어있습니다."
-                    st.markdown(last_msg_content)
+                    if isinstance(last_msg_content, list):
+                        # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
+                        parsed_text = ""
+                        for item in last_msg_content:
+                            if isinstance(item, dict) and "text" in item:
+                                parsed_text += item["text"]
+                            elif isinstance(item, str):
+                                parsed_text += item
+                        last_msg_content = parsed_text
 
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": last_msg_content}
-                )
-            except Exception as e:
-                error_msg = f"❌ 오류가 발생했습니다: {e}"
-                st.error(error_msg)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": error_msg}
-                )
+                    if last_msg_content:
+                        st.markdown(last_msg_content)
+                    else:
+                        last_msg_content = "처리가 완료되었지만 응답 내용이 비어있습니다."
+                        st.markdown(last_msg_content)
+
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": last_msg_content}
+                    )
+                except Exception as e:
+                    error_msg = f"❌ 오류가 발생했습니다: {e}"
+                    st.error(error_msg)
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": error_msg}
+                    )
+
+with tab_dashboard:
+    st.markdown("### 📊 과제 대시보드")
+    try:
+        all_tasks = get_assignments()
+        if not all_tasks:
+            st.info("📚 등록된 과제가 없습니다. 챗봇에게 과제를 추가해달라고 말해보세요!")
+        else:
+            df_data = []
+            for t in all_tasks:
+                df_data.append({
+                    "ID": t.id,
+                    "완료": t.status == "done",
+                    "상태": t.status,
+                    "제목": t.title,
+                    "과목": t.course_name,
+                    "마감일": t.due_date,
+                    "우선순위": t.priority,
+                })
+            df = pd.DataFrame(df_data)
+            
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "ID": None, # Hide ID
+                    "완료": st.column_config.CheckboxColumn("완료", help="체크 시 즉시 완료 처리됩니다."),
+                    "상태": st.column_config.TextColumn("상태", disabled=True),
+                    "제목": st.column_config.TextColumn("과제 제목", disabled=True),
+                    "과목": st.column_config.TextColumn("과목명", disabled=True),
+                    "마감일": st.column_config.TextColumn("마감일", disabled=True),
+                    "우선순위": st.column_config.TextColumn("우선순위", disabled=True),
+                },
+                disabled=["상태", "제목", "과목", "마감일", "우선순위"],
+                hide_index=True,
+                use_container_width=True,
+                key="task_editor"
+            )
+            
+            # 변경점 감지하여 DB 업데이트
+            for i, row in edited_df.iterrows():
+                was_done = df.iloc[i]["완료"]
+                is_done = row["완료"]
+                if was_done != is_done:
+                    tid = row["ID"]
+                    new_status = "done" if is_done else "pending"
+                    update_assignment_status(int(tid), new_status)
+                    st.success(f"과제 '{row['제목']}' 상태가 변경되었습니다!")
+                    st.rerun()
+    except Exception as e:
+        st.error(f"대시보드 로딩 실패: {e}")
+
+with tab_calendar:
+    st.markdown("### 📅 일정 및 캘린더")
+    try:
+        schedules = get_schedules()
+        if not schedules:
+            st.info("📅 등록된 일정이 없습니다. 챗봇에게 일정을 추가해 보세요!")
+        else:
+            by_date = defaultdict(list)
+            for s in schedules:
+                by_date[s.date].append(s)
+            
+            for date_key, items in sorted(by_date.items()):
+                with st.expander(f"📅 {date_key}", expanded=True):
+                    for s in items:
+                        cat_emoji = {"class": "📖", "exam": "📝", "personal": "👤", "meeting": "👥"}.get(s.category, "📌")
+                        time_str = f"`{s.start_time}`" if s.start_time else "`하루종일`"
+                        if s.start_time and s.end_time:
+                            time_str += f" ~ `{s.end_time}`"
+                        st.markdown(f"- {cat_emoji} **{s.title}** ({time_str})")
+    except Exception as e:
+        st.error(f"캘린더 로딩 실패: {e}")
+
+with tab_settings:
+    st.markdown("### ⚙️ 사용자 설정")
+    st.caption("AI 어시스턴트가 답변할 때 참고할 개인화 정보를 설정하세요.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### 👤 개인 정보")
+        current_major = get_user_setting("major", "")
+        major = st.text_input("🎓 전공 (예: 소프트웨어공학과)", value=current_major)
+        
+        current_grade = get_user_setting("grade", "1학년")
+        grade_options = ["1학년", "2학년", "3학년", "4학년", "5학년 이상", "기타"]
+        grade_idx = grade_options.index(current_grade) if current_grade in grade_options else 0
+        grade = st.selectbox("📚 학년", grade_options, index=grade_idx)
+        
+    with col2:
+        st.markdown("#### 🔔 개인화 조건")
+        current_notify = int(get_user_setting("notify_days", "3"))
+        notify_days = st.number_input("⏰ 마감(D-Day) 알림 기준일", min_value=1, max_value=14, value=current_notify)
+        
+        current_llm = get_user_setting("llm_pref", "Auto")
+        llm_options = ["Auto", "Gemini", "OpenAI"]
+        llm_idx = llm_options.index(current_llm) if current_llm in llm_options else 0
+        llm_pref = st.selectbox("🤖 선호 LLM 엔진", llm_options, index=llm_idx, disabled=True, help="기존 .env 로직에 의해 자동감지 중입니다.")
+        
+    if st.button("💾 설정 저장", type="primary", use_container_width=True):
+        set_user_setting("major", major)
+        set_user_setting("grade", grade)
+        set_user_setting("notify_days", str(notify_days))
+        set_user_setting("llm_pref", llm_pref)
+        st.success("설정이 성공적으로 저장되었습니다! 다음 챗봇 대화부터 즉시 반영됩니다.")
