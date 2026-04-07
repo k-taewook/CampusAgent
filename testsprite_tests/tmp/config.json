@@ -8,7 +8,7 @@
     "projectName": "CampusAgent",
     "projectPath": "c:\\Users\\kimka\\OneDrive\\Documents\\GitHub\\CampusAgent",
     "testIds": [],
-    "additionalInstruction": "",
+    "additionalInstruction": "Check the UI error when running streamlit run app.py",
     "serverMode": "development",
     "envs": {
       "API_KEY": "sk-user-OJzNmZEvUk3AgqirlpaCamAuEAhLt_Q0ZcdTcrEDMChXAJCYiglG0qgymh221szyVQErLaRv2sAxTEbzzdRBTRrgceV5vzznCZ6HXKVfwiJo_Xs5X_EM0tnylrX8CngOa30"

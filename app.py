@@ -53,52 +53,37 @@ with st.sidebar:
 
     st.divider()
 
-    # ── 과제 대시보드 ──
-    st.markdown("### 📋 과제 현황")
+    # ── 🚨 긴급 알림 ──
+    st.markdown("### 🚨 긴급 알림")
+    has_urgent = False
+    
     try:
-        all_tasks = get_assignments()
-        pending = [t for t in all_tasks if t.status == "pending"]
-        in_progress = [t for t in all_tasks if t.status == "in_progress"]
-        done = [t for t in all_tasks if t.status == "done"]
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("대기", len(pending))
-        col2.metric("진행중", len(in_progress))
-        col3.metric("완료", len(done))
-
-        # 마감 임박 과제
-        upcoming = get_upcoming_assignments(days=3)
+        upcoming = get_upcoming_assignments(days=1)
         if upcoming:
-            st.markdown("**⏰ 3일 이내 마감:**")
+            has_urgent = True
             for task in upcoming:
-                st.markdown(f"- {task.title} ({task.due_date})")
-    except Exception:
-        st.caption("DB 초기화 후 표시됩니다.")
+                st.error(f"⏰ 오늘 마감: {task.title}")
+    except Exception: pass
 
-    st.divider()
-
-    # ── 오늘 일정 ──
-    st.markdown("### 📅 오늘 일정")
     try:
         today_events = get_today_schedules()
         if today_events:
+            has_urgent = True
             for event in today_events:
-                time_str = f" {event.start_time}" if event.start_time else ""
-                st.markdown(f"- {event.title}{time_str}")
-        else:
-            st.caption("오늘 일정이 없습니다.")
-    except Exception:
-        st.caption("DB 초기화 후 표시됩니다.")
-
-    # ── D-day ──
+                st.warning(f"📅 오늘 일정: {event.title}")
+    except Exception: pass
+        
     try:
         dday_list = get_dday_schedules(category="exam")
         if dday_list:
-            st.markdown("**📝 시험 D-day:**")
-            for d in dday_list[:3]:
-                st.markdown(f"- {d['display']}")
-    except Exception:
-        pass
+            d = dday_list[0]
+            if d["d_day"] <= 3:
+                has_urgent = True
+                st.error(f"📝 {d['display']}")
+    except Exception: pass
+        
+    if not has_urgent:
+        st.success("🎉 긴급한 일정이 없습니다! 평화로운 하루 되세요.")
 
     st.divider()
 
@@ -138,15 +123,37 @@ if "graph" not in st.session_state:
 tab_chat, tab_dashboard, tab_calendar, tab_settings = st.tabs(["💬 챗봇", "📊 과제 대시보드", "📅 캘린더", "⚙️ 설정"])
 
 with tab_chat:
-    # 이전 메시지 출력
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # 대화 내용만 위에서 아래로 스크롤 가능하도록 컨테이너 지정
+    chat_container = st.container(height=600, border=False)
+    
+    with chat_container:
+        # 이전 메시지 출력
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    # ── ⚡ 원클릭 빠른 시작 버튼 ──
+    st.markdown("💡 **추천 명령어**")
+    btn_cols = st.columns(3)
+    if btn_cols[0].button("📅 오늘 일정 보여줘"):
+        st.session_state.quick_prompt = "오늘 일정 보여줘"
+    if btn_cols[1].button("⏰ 마감 임박 과제 확인"):
+        st.session_state.quick_prompt = "이번 주 마감인 과제 알려줘"
+    if btn_cols[2].button("🔍 최신 학사 공지 검색"):
+        st.session_state.quick_prompt = "최신 공지사항 검색해줘"
 
     # 사용자 입력
-    if prompt := st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓"):
-        # 사용자 메시지 표시
-        st.chat_message("user").markdown(prompt)
+    user_input = st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓")
+    
+    prompt = user_input
+    if "quick_prompt" in st.session_state:
+        prompt = st.session_state.quick_prompt
+        del st.session_state["quick_prompt"]
+        
+    if prompt:
+        with chat_container:
+            # 사용자 메시지 표시
+            st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         from datetime import datetime
@@ -155,59 +162,71 @@ with tab_chat:
         user_grade_ctx = get_user_setting("grade", "미설정")
         config = {"configurable": {"thread_id": "streamlit_session"}}
 
-        with st.chat_message("assistant"):
-            with st.spinner("CampusAgent가 생각 중... 🤔"):
-                last_msg_content = ""
-                try:
-                    # AgentState에 맞춰서 messages와 current_context 전달
-                    # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
-                    for event in st.session_state.graph.stream(
-                        {
-                            "messages": [("user", prompt)],
-                            "current_context": {
-                                "current_time": current_time_str,
-                                "user_major": user_major_ctx,
-                                "user_grade": user_grade_ctx
-                            }
-                        }, 
-                        config
-                    ):
-                        for node_name, node_state in event.items():
-                            if "messages" in node_state and node_state["messages"]:
-                                last_message = node_state["messages"][-1]
-                                if last_message.type == "ai" and last_message.content:
-                                    last_msg_content = last_message.content
+        with chat_container:
+            with st.chat_message("assistant"):
+                with st.spinner("CampusAgent가 생각 중... 🤔"):
+                    last_msg_content = ""
+                    try:
+                        # AgentState에 맞춰서 messages와 current_context 전달
+                        # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
+                        for event in st.session_state.graph.stream(
+                            {
+                                "messages": [("user", prompt)],
+                                "current_context": {
+                                    "current_time": current_time_str,
+                                    "user_major": user_major_ctx,
+                                    "user_grade": user_grade_ctx
+                                }
+                            }, 
+                            config
+                        ):
+                            for node_name, node_state in event.items():
+                                if "messages" in node_state and node_state["messages"]:
+                                    last_message = node_state["messages"][-1]
+                                    if last_message.type == "ai" and last_message.content:
+                                        last_msg_content = last_message.content
 
-                    if isinstance(last_msg_content, list):
-                        # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
-                        parsed_text = ""
-                        for item in last_msg_content:
-                            if isinstance(item, dict) and "text" in item:
-                                parsed_text += item["text"]
-                            elif isinstance(item, str):
-                                parsed_text += item
-                        last_msg_content = parsed_text
+                        if isinstance(last_msg_content, list):
+                            # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
+                            parsed_text = ""
+                            for item in last_msg_content:
+                                if isinstance(item, dict) and "text" in item:
+                                    parsed_text += item["text"]
+                                elif isinstance(item, str):
+                                    parsed_text += item
+                            last_msg_content = parsed_text
 
-                    if last_msg_content:
-                        st.markdown(last_msg_content)
-                    else:
-                        last_msg_content = "처리가 완료되었지만 응답 내용이 비어있습니다."
-                        st.markdown(last_msg_content)
+                        if last_msg_content:
+                            st.markdown(last_msg_content)
+                            # Actionable RAG 제안 버튼
+                            if "공지" in prompt or "검색" in prompt:
+                                if st.button("✅ 이 내용을 바탕으로 캘린더나 과제에 등록하기", key="rag_action"):
+                                    st.session_state.quick_prompt = "방금 찾은 공지사항 정보를 바탕으로 주요 마감일이나 일정을 내 캘린더/과제에 등록해줘."
+                                    st.rerun()
+                        else:
+                            last_msg_content = "처리가 완료되었지만 응답 내용이 비어있습니다."
+                            st.markdown(last_msg_content)
 
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": last_msg_content}
-                    )
-                except Exception as e:
-                    error_msg = f"❌ 오류가 발생했습니다: {e}"
-                    st.error(error_msg)
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": error_msg}
-                    )
+                        st.session_state.messages.append(
+                            {"role": "assistant", "content": last_msg_content}
+                        )
+                    except Exception as e:
+                        error_msg = f"❌ 오류가 발생했습니다: {e}"
+                        st.error(error_msg)
+                        st.session_state.messages.append(
+                            {"role": "assistant", "content": error_msg}
+                        )
 
 with tab_dashboard:
     st.markdown("### 📊 과제 대시보드")
+    
+    urgent_only = st.toggle("🔥 긴급(High) 과제만 보기", value=False)
+    
     try:
         all_tasks = get_assignments()
+        if urgent_only:
+            all_tasks = [t for t in all_tasks if t.priority == 'high']
+            
         if not all_tasks:
             st.info("📚 등록된 과제가 없습니다. 챗봇에게 과제를 추가해달라고 말해보세요!")
         else:
@@ -237,7 +256,6 @@ with tab_dashboard:
                 },
                 disabled=["상태", "제목", "과목", "마감일", "우선순위"],
                 hide_index=True,
-                use_container_width=True,
                 key="task_editor"
             )
             

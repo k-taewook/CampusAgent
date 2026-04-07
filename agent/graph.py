@@ -76,10 +76,18 @@ def build_graph():
         if not context_data:
             from datetime import datetime
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            user_major = "미설정"
+            user_grade = "미설정"
         else:
             current_time = context_data.get("current_time", "알 수 없음")
+            user_major = context_data.get("user_major", "미설정")
+            user_grade = context_data.get("user_grade", "미설정")
             
-        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(current_time=current_time)
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            current_time=current_time,
+            user_major=user_major,
+            user_grade=user_grade
+        )
         system_message = SystemMessage(content=system_prompt)
 
         if model:
