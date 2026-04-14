@@ -275,26 +275,214 @@ with tab_dashboard:
         st.error(f"대시보드 로딩 실패: {e}")
 
 with tab_calendar:
-    st.markdown("### 📅 일정 및 캘린더")
-    try:
-        schedules = get_schedules()
-        if not schedules:
-            st.info("📅 등록된 일정이 없습니다. 챗봇에게 일정을 추가해 보세요!")
-        else:
-            by_date = defaultdict(list)
-            for s in schedules:
-                by_date[s.date].append(s)
-            
-            for date_key, items in sorted(by_date.items()):
-                with st.expander(f"📅 {date_key}", expanded=True):
-                    for s in items:
-                        cat_emoji = {"class": "📖", "exam": "📝", "personal": "👤", "meeting": "👥"}.get(s.category, "📌")
-                        time_str = f"`{s.start_time}`" if s.start_time else "`하루종일`"
-                        if s.start_time and s.end_time:
-                            time_str += f" ~ `{s.end_time}`"
-                        st.markdown(f"- {cat_emoji} **{s.title}** ({time_str})")
-    except Exception as e:
-        st.error(f"캘린더 로딩 실패: {e}")
+    import calendar as _cal
+    from datetime import date as _date
+
+    # ── 세션 상태 초기화 ──
+    _today = _date.today()
+    if "cal_year" not in st.session_state:
+        st.session_state.cal_year = _today.year
+    if "cal_month" not in st.session_state:
+        st.session_state.cal_month = _today.month
+
+    # ── 상단: 필터 + 월 네비게이션 ──
+    st.markdown("### 📅 캘린더")
+    top_left, top_right = st.columns([4, 3])
+
+    with top_left:
+        filter_type = st.radio(
+            "표시 항목",
+            ["전체", "과제", "일정"],
+            horizontal=True,
+            label_visibility="collapsed",
+            key="cal_filter",
+        )
+
+    with top_right:
+        nav_prev, nav_title, nav_next = st.columns([1, 3, 1])
+        with nav_prev:
+            if st.button("◀", use_container_width=True, key="cal_prev"):
+                if st.session_state.cal_month == 1:
+                    st.session_state.cal_month = 12
+                    st.session_state.cal_year -= 1
+                else:
+                    st.session_state.cal_month -= 1
+                st.rerun()
+        with nav_title:
+            st.markdown(
+                f"<p style='text-align:center; font-weight:700; font-size:1.05em; margin:6px 0'>"
+                f"{st.session_state.cal_year}년 {st.session_state.cal_month}월</p>",
+                unsafe_allow_html=True,
+            )
+        with nav_next:
+            if st.button("▶", use_container_width=True, key="cal_next"):
+                if st.session_state.cal_month == 12:
+                    st.session_state.cal_month = 1
+                    st.session_state.cal_year += 1
+                else:
+                    st.session_state.cal_month += 1
+                st.rerun()
+
+    # ── 데이터 수집 ──
+    events_by_date = defaultdict(list)
+
+    if filter_type in ("전체", "일정"):
+        try:
+            for s in get_schedules():
+                events_by_date[s.date].append({
+                    "type": "schedule",
+                    "title": s.title,
+                    "category": s.category,
+                    "time": s.start_time or "",
+                    "end_time": s.end_time or "",
+                })
+        except Exception:
+            pass
+
+    if filter_type in ("전체", "과제"):
+        try:
+            for a in get_assignments():
+                events_by_date[a.due_date].append({
+                    "type": "assignment",
+                    "title": a.title,
+                    "priority": a.priority,
+                    "status": a.status,
+                    "course": a.course_name,
+                })
+        except Exception:
+            pass
+
+    # ── CSS 주입: Streamlit CSS 변수 기반 테마 자동 대응 ──
+    st.markdown("""
+    <style>
+    .cc-header {
+        text-align: center;
+        font-weight: 700;
+        padding: 6px 0;
+        border-bottom: 2px solid rgba(128,128,128,0.3);
+        color: var(--text-color);
+    }
+    .cc-sat { color: #1565C0 !important; }
+    .cc-sun { color: #E53935 !important; }
+    .cc-cell {
+        background: var(--background-color);
+        border: 1px solid rgba(128,128,128,0.25);
+        border-radius: 8px;
+        padding: 5px 4px;
+        min-height: 95px;
+        margin: 1px 0;
+    }
+    .cc-today {
+        background: var(--secondary-background-color) !important;
+        border: 2px solid var(--primary-color) !important;
+    }
+    .cc-num {
+        text-align: right;
+        font-size: 0.88em;
+        margin-bottom: 3px;
+        color: var(--text-color);
+        font-weight: 400;
+    }
+    .cc-today .cc-num { font-weight: 700; }
+    .cc-badge {
+        display: block;
+        color: #fff;
+        border-radius: 3px;
+        padding: 1px 4px;
+        margin: 2px 0;
+        font-size: 0.67em;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    /* 다크모드: 토·일 색상을 밝게 */
+    @media (prefers-color-scheme: dark) {
+        .cc-sat { color: #64B5F6 !important; }
+        .cc-sun { color: #EF9A9A !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── 캘린더 그리드 ──
+    _year  = st.session_state.cal_year
+    _month = st.session_state.cal_month
+
+    DAY_LABELS   = ["월", "화", "수", "목", "금", "토", "일"]
+    DAY_CLASSES  = ["", "", "", "", "", "cc-sat", "cc-sun"]
+
+    # 요일 헤더
+    hcols = st.columns(7)
+    for i, lbl in enumerate(DAY_LABELS):
+        hcols[i].markdown(
+            f"<div class='cc-header {DAY_CLASSES[i]}'>{lbl}</div>",
+            unsafe_allow_html=True,
+        )
+
+    # 주 단위 렌더링
+    SCHED_COLORS = {
+        "class":    "#43A047",
+        "exam":     "#E53935",
+        "personal": "#1E88E5",
+        "meeting":  "#FB8C00",
+        "other":    "#8E24AA",
+    }
+    PRIORITY_COLORS = {"high": "#E53935", "medium": "#FB8C00", "low": "#43A047"}
+
+    for week in _cal.monthcalendar(_year, _month):
+        wcols = st.columns(7)
+        for col_i, day in enumerate(week):
+            with wcols[col_i]:
+                if day == 0:
+                    st.markdown("<div class='cc-cell' style='border-color:transparent;background:transparent'></div>",
+                                unsafe_allow_html=True)
+                    continue
+
+                cur      = _date(_year, _month, day)
+                date_str = cur.strftime("%Y-%m-%d")
+                is_today = cur == _today
+                today_cls = "cc-today" if is_today else ""
+
+                badges = ""
+                for ev in events_by_date.get(date_str, []):
+                    if ev["type"] == "schedule":
+                        bg_color = SCHED_COLORS.get(ev["category"], "#607D8B")
+                        icon = "📅"
+                    else:
+                        bg_color = PRIORITY_COLORS.get(ev.get("priority", "medium"), "#FB8C00")
+                        if ev.get("status") == "done":
+                            bg_color = "#757575"
+                        icon = "📋"
+                    short = ev["title"][:8] + "…" if len(ev["title"]) > 8 else ev["title"]
+                    badges += (
+                        f"<span class='cc-badge' style='background:{bg_color}'>"
+                        f"{icon} {short}</span>"
+                    )
+
+                st.markdown(
+                    f"<div class='cc-cell {today_cls}'>"
+                    f"<div class='cc-num {DAY_CLASSES[col_i]}'>{day}</div>"
+                    f"{badges}</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ── 범례 ──
+    st.markdown("---")
+    legend_cols = st.columns(7)
+    legends = [
+        ("📋 과제 (높음)", "#E53935"),
+        ("📋 과제 (보통)", "#FB8C00"),
+        ("📋 과제 (낮음)", "#43A047"),
+        ("📅 수업",       "#43A047"),
+        ("📝 시험",       "#E53935"),
+        ("👥 회의",       "#FB8C00"),
+        ("👤 개인",       "#1E88E5"),
+    ]
+    for col, (label, color) in zip(legend_cols, legends):
+        col.markdown(
+            f"<div style='background:{color};color:#fff;border-radius:4px;"
+            f"padding:3px 6px;font-size:0.7em;text-align:center'>{label}</div>",
+            unsafe_allow_html=True,
+        )
 
 with tab_settings:
     st.markdown("### ⚙️ 사용자 설정")
