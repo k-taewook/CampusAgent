@@ -64,6 +64,7 @@ class SimpleTextChunker:
                     "date": doc.get("date", ""),
                     "category": doc.get("category", ""),
                     "source": doc.get("source", ""),
+                    "url": doc.get("url", ""),
                     "chunk_index": chunk_idx,
                     "total_chunks": len(chunks),
                 }

@@ -377,7 +377,7 @@ def search_notices_live(
     query: str,
     department: str = "cse",
     pages: int = 1,
-    max_results: int = 5,
+    max_results: Optional[int] = None,
 ) -> List[dict]:
     """
     실시간 크롤링 + 검색: 학과 홈페이지 검색 기능을 이용하여 공지사항을 수집한 뒤 반환합니다.
@@ -387,7 +387,7 @@ def search_notices_live(
         query: 사용자 입력 쿼리 (예: "장학금 공지사항 찾아줘", "수강 변경", "졸업 요건")
         department: 학과 코드 (기본값: "cse")
         pages: 크롤링할 페이지 수 (기본값: 1)
-        max_results: 최대 반환 결과 수 (기본값: 5)
+        max_results: 최대 반환 결과 수 (기본값: None = 페이지 전체)
 
     Returns:
         검색 결과 [{title, content, date, category, url, attachments}, ...]
@@ -400,12 +400,12 @@ def search_notices_live(
 
     # 2. 서버 사이드 검색으로 목록 크롤링
     notice_list = crawl_notice_list(department=department, pages=pages, search_keyword=main_keyword)
-    
+
     if not notice_list:
         print(f"⚠️ 서버에 '{main_keyword}'로 검색된 공지가 없습니다.")
         return []
 
-    matched = notice_list[:max_results]
+    matched = notice_list[:max_results] if max_results is not None else notice_list
     print(f"🔍 홈페이지 서버에서 '{main_keyword}' 검색 → {len(matched)}건 수집 완료")
 
     # 3. 검색된 공지의 상세 내용 크롤링
@@ -434,36 +434,17 @@ def search_notices_live(
 
 
 def _extract_keywords(query: str) -> List[str]:
-    """검색 쿼리에서 키워드를 추출합니다."""
-    # 불용어 제거
+    """검색 쿼리에서 불용어를 제거하고 의미 있는 단어를 순서대로 반환합니다."""
     stopwords = {
         "공지", "공지사항", "찾아줘", "검색", "알려줘", "보여줘",
         "관련", "최신", "해줘", "좀", "있어", "뭐", "어떤",
         "대학", "학과", "확인", "조회",
     }
 
-    # 키워드 매핑 (유의어 확장)
-    keyword_map = {
-        "장학": ["장학", "장학금", "교외장학", "교내장학", "감면"],
-        "취업": ["취업", "채용", "인턴", "현장실습", "산학"],
-        "수업": ["수업", "수강", "휴강", "보강", "교과"],
-        "졸업": ["졸업", "이수", "학점"],
-        "시험": ["시험", "중간고사", "기말고사", "토익", "어학"],
-        "등록": ["등록", "등록금", "학비"],
-        "근로": ["근로", "국가근로", "교비근로"],
-    }
-
-    words = query.lower().replace(",", " ").split()
+    words = query.replace(",", " ").split()
     keywords = [w for w in words if w not in stopwords and len(w) >= 2]
 
-    # 유의어 확장
-    expanded = set(keywords)
-    for kw in keywords:
-        for base, synonyms in keyword_map.items():
-            if kw in synonyms or base in kw:
-                expanded.update(synonyms)
-
-    return list(expanded) if expanded else [query.lower()]
+    return keywords if keywords else [query]
 
 
 # ──────────────────────────────────────

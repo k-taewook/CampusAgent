@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/Users/kimka/OneDrive/Documents/GitHub/CampusAgent/tests/*.py)"
+    ]
+  }
+}

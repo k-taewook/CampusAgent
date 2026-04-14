@@ -16,48 +16,113 @@ from rag.embedder import DocumentEmbedder
 @tool
 def search_university_notices(query: str, n_results: int = 5) -> str:
     """
-    학과 홈페이지에서 공지사항을 실시간으로 크롤링하여 검색합니다.
+    학과 공지사항을 검색합니다.
+    ChromaDB에 관련 데이터가 있으면 즉시 반환하고,
+    없으면 홈페이지 검색 기능으로 1페이지 전체를 크롤링하여 ChromaDB에 저장한 뒤 반환합니다.
     사용자가 '장학금 공지사항 찾아줘', '휴강 공지 있어?' 등을 요청하면 이 도구를 사용하세요.
-    학과 홈페이지를 직접 방문하여 관련 공지를 찾아 상세 내용까지 가져옵니다.
 
     Args:
         query: 검색 키워드 (예: "장학금", "수강 변경", "졸업 요건", "휴강")
-        n_results: 최대 반환 결과 수 (기본값: 5)
+        n_results: 반환할 최대 결과 수 (기본값: 5)
 
     Returns:
         검색 결과 문자열
     """
     try:
-        from rag.crawler import search_notices_live
+        from rag.crawler import search_notices_live, _extract_keywords
+        from datetime import datetime
 
-        results = search_notices_live(
+        # ── 1단계: ChromaDB에 관련 데이터가 있는지 먼저 확인 ──
+        RELEVANCE_THRESHOLD = 0.45  # 이 점수 이상이면 캐시 데이터로 답변
+
+        cached = search_notices(query=query, n_results=n_results * 3)
+
+        # 제목 기준 중복 제거 후 충분히 관련 있는 결과만 추출
+        seen: set = set()
+        relevant_cached = []
+        for r in cached:
+            if r["relevance"] >= RELEVANCE_THRESHOLD and r["title"] not in seen:
+                seen.add(r["title"])
+                relevant_cached.append(r)
+            if len(relevant_cached) >= n_results:
+                break
+
+        if relevant_cached:
+            # ChromaDB 캐시 결과 반환
+            header = (
+                f"🔍 **'{query}' 관련 공지사항** (저장된 데이터에서 검색)\n"
+                f"{'─' * 40}\n\n"
+            )
+            items = []
+            for i, r in enumerate(relevant_cached, 1):
+                url = r.get("url", "")
+                items.append(
+                    f"📌 **{i}. {r['title']}**\n"
+                    f"   📅 {r['date'] or '날짜 없음'} | "
+                    f"📂 {r['category']} | "
+                    f"관련도 {r['relevance']:.0%}\n"
+                    f"   📄 {r['text'][:300]}"
+                    f"{'...' if len(r['text']) > 300 else ''}\n"
+                    + (f"   🔗 {url}" if url else "")
+                )
+            return header + "\n\n".join(items)
+
+        # ── 2단계: 캐시 없음 → 홈페이지 검색 기능으로 크롤링 ──
+        crawled = search_notices_live(
             query=query,
             department="cse",
             pages=1,
-            max_results=n_results,
+            max_results=None,  # 1페이지 전체
         )
 
-        if not results:
+        if not crawled:
             return (
                 f"🔍 '{query}' 관련 공지사항을 찾을 수 없습니다.\n\n"
                 "학교 홈페이지 접속에 문제가 있거나, "
                 "해당 키워드와 일치하는 공지가 없을 수 있습니다."
             )
 
+        # ── 3단계: 크롤링 결과 전체를 ChromaDB에 저장 ──
+        keywords = _extract_keywords(query)
+        main_keyword = keywords[0] if keywords else query
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+
+        raw_docs = []
+        for idx, r in enumerate(crawled):
+            raw_docs.append({
+                "id": f"live_{main_keyword}_{timestamp}_{idx}",
+                "title": r["title"],
+                "content": r["content"],
+                "date": r["date"],
+                "category": r["category"],
+                "source": "인하공업전문대학 학과 홈페이지",
+                "url": r.get("url", ""),
+                "full_text": f"[{r['category']}] {r['title']}\n{r['content']}",
+            })
+
+        chunker = SimpleTextChunker(chunk_size=500, chunk_overlap=50)
+        chunked = chunker.split_documents(raw_docs)
+        embedder = DocumentEmbedder()
+        embedder.embed_and_store(chunked)
+
+        # ── 4단계: 크롤링 결과 반환 (상위 n_results건) ──
+        display = crawled[:n_results]
+
         header = (
-            f"🔍 **'{query}' 관련 공지사항** "
-            f"(학과 홈페이지에서 {len(results)}건 검색)\n"
+            f"🔍 **'{query}' 관련 공지사항**\n"
+            f"   홈페이지 검색 결과 **{len(crawled)}건** 수집 · ChromaDB 저장 완료 "
+            f"(상위 {len(display)}건 표시)\n"
             f"{'─' * 40}\n\n"
         )
 
         items = []
-        for i, r in enumerate(results, 1):
-            # 첨부파일 표시
+        for i, r in enumerate(display, 1):
             attach_info = ""
             if r.get("attachments"):
                 attach_names = [a["name"] for a in r["attachments"]]
                 attach_info = f"\n   📎 첨부: {', '.join(attach_names)}"
 
+            url = r.get("url", "")
             items.append(
                 f"📌 **{i}. {r['title']}**\n"
                 f"   📅 {r['date'] or '날짜 없음'} | "
@@ -66,7 +131,7 @@ def search_university_notices(query: str, n_results: int = 5) -> str:
                 f"   📄 {r['content'][:300]}"
                 f"{'...' if len(r['content']) > 300 else ''}"
                 f"{attach_info}\n"
-                f"   🔗 {r['url']}"
+                + (f"   🔗 {url}" if url else "")
             )
 
         return header + "\n\n".join(items)
