@@ -51,9 +51,13 @@ REQUEST_DELAY = 1.0  # 서버 부하 방지를 위한 요청 간격 (초)
 # ──────────────────────────────────────
 
 
-def _build_enc_param(board_path: str, page: int = 1) -> str:
+def _build_enc_param(board_path: str, page: int = 1, search_keyword: Optional[str] = None) -> str:
     """K2Web 시스템의 enc 파라미터를 생성합니다."""
-    inner_url = quote(f"{board_path}?page={page}&", safe='')
+    query_str = f"page={page}&"
+    if search_keyword:
+        query_str += f"srchColumn=sj&srchWrd={quote(search_keyword)}&"
+    
+    inner_url = quote(f"{board_path}?{query_str}", safe='')
     raw = f"fnct1|@@|{inner_url}"
     return base64.b64encode(raw.encode()).decode()
 
@@ -61,6 +65,7 @@ def _build_enc_param(board_path: str, page: int = 1) -> str:
 def crawl_notice_list(
     department: str = "cse",
     pages: int = 3,
+    search_keyword: Optional[str] = None,
 ) -> List[dict]:
     """
     학과 공지사항 목록을 크롤링합니다.
@@ -68,6 +73,7 @@ def crawl_notice_list(
     Args:
         department: 학과 코드 (기본값: "cse" = 컴퓨터시스템공학과)
         pages: 크롤링할 페이지 수 (기본값: 3)
+        search_keyword: 게시판 내부 제목 검색어 (선택)
 
     Returns:
         공지사항 목록 [{title, date, url, views, is_pinned}, ...]
@@ -89,7 +95,7 @@ def crawl_notice_list(
 
     for page_num in range(1, pages + 1):
         # K2Web enc 방식으로 목록 페이지 접근
-        enc = _build_enc_param(board_path, page_num)
+        enc = _build_enc_param(board_path, page_num, search_keyword)
         url = f"{BASE_URL}/{path_prefix}/{subview_id}/subview.do"
 
         print(f"📡 [{dept_name}] 페이지 {page_num}/{pages} 크롤링 중...")
@@ -367,17 +373,111 @@ def _guess_category(title: str, content: str) -> str:
     return "일반"
 
 
+def search_notices_live(
+    query: str,
+    department: str = "cse",
+    pages: int = 1,
+    max_results: int = 5,
+) -> List[dict]:
+    """
+    실시간 크롤링 + 검색: 학과 홈페이지 검색 기능을 이용하여 공지사항을 수집한 뒤 반환합니다.
+    RAG DB 저장 없이, 바로 크롤링 → 상세 내용 반환.
+
+    Args:
+        query: 사용자 입력 쿼리 (예: "장학금 공지사항 찾아줘", "수강 변경", "졸업 요건")
+        department: 학과 코드 (기본값: "cse")
+        pages: 크롤링할 페이지 수 (기본값: 1)
+        max_results: 최대 반환 결과 수 (기본값: 5)
+
+    Returns:
+        검색 결과 [{title, content, date, category, url, attachments}, ...]
+    """
+    # 1. 쿼리에서 가장 중요한 검색어 하나를 추출합니다
+    keywords = _extract_keywords(query)
+    main_keyword = keywords[0] if keywords else query.replace(" ", "")
+
+    print(f"📡 '{main_keyword}' 키워드로 홈페이지 서버 사이드 검색 시도 중...")
+
+    # 2. 서버 사이드 검색으로 목록 크롤링
+    notice_list = crawl_notice_list(department=department, pages=pages, search_keyword=main_keyword)
+    
+    if not notice_list:
+        print(f"⚠️ 서버에 '{main_keyword}'로 검색된 공지가 없습니다.")
+        return []
+
+    matched = notice_list[:max_results]
+    print(f"🔍 홈페이지 서버에서 '{main_keyword}' 검색 → {len(matched)}건 수집 완료")
+
+    # 3. 검색된 공지의 상세 내용 크롤링
+    results = []
+    for idx, notice in enumerate(matched):
+        print(f"  [{idx + 1}/{len(matched)}] {notice['title'][:40]}...")
+        detail = crawl_notice_detail(notice["url"])
+        time.sleep(REQUEST_DELAY)
+
+        final_title = detail["title"] if detail["title"] else notice["title"]
+        final_date = detail["date"] if detail["date"] else notice["date"]
+        content = detail["content"] if detail["content"] else notice["title"]
+        category = _guess_category(final_title, content)
+
+        results.append({
+            "title": final_title,
+            "content": content,
+            "date": final_date,
+            "category": category,
+            "url": notice["url"],
+            "views": notice.get("views", ""),
+            "attachments": detail.get("attachments", []),
+        })
+
+    return results
+
+
+def _extract_keywords(query: str) -> List[str]:
+    """검색 쿼리에서 키워드를 추출합니다."""
+    # 불용어 제거
+    stopwords = {
+        "공지", "공지사항", "찾아줘", "검색", "알려줘", "보여줘",
+        "관련", "최신", "해줘", "좀", "있어", "뭐", "어떤",
+        "대학", "학과", "확인", "조회",
+    }
+
+    # 키워드 매핑 (유의어 확장)
+    keyword_map = {
+        "장학": ["장학", "장학금", "교외장학", "교내장학", "감면"],
+        "취업": ["취업", "채용", "인턴", "현장실습", "산학"],
+        "수업": ["수업", "수강", "휴강", "보강", "교과"],
+        "졸업": ["졸업", "이수", "학점"],
+        "시험": ["시험", "중간고사", "기말고사", "토익", "어학"],
+        "등록": ["등록", "등록금", "학비"],
+        "근로": ["근로", "국가근로", "교비근로"],
+    }
+
+    words = query.lower().replace(",", " ").split()
+    keywords = [w for w in words if w not in stopwords and len(w) >= 2]
+
+    # 유의어 확장
+    expanded = set(keywords)
+    for kw in keywords:
+        for base, synonyms in keyword_map.items():
+            if kw in synonyms or base in kw:
+                expanded.update(synonyms)
+
+    return list(expanded) if expanded else [query.lower()]
+
+
 # ──────────────────────────────────────
 # CLI 테스트용
 # ──────────────────────────────────────
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("🕷️ CampusAgent 학과 공지사항 크롤러 테스트")
+    print("🕷️ CampusAgent 실시간 크롤링 검색 테스트")
     print("=" * 50)
 
-    docs = crawl_full_notices(department="cse", pages=1, max_detail=3)
-    for doc in docs:
+    results = search_notices_live(query="장학금", pages=1, max_results=3)
+    for doc in results:
         print(f"\n📌 {doc['title']}")
         print(f"   📅 {doc['date']} | 📂 {doc['category']}")
         print(f"   📄 {doc['content'][:100]}...")
+

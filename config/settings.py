@@ -71,5 +71,5 @@ CHROMA_COLLECTION_NAME: str = "university_notices"
 # 앱 메타데이터
 # ──────────────────────────────────────
 APP_NAME: str = "CampusAgent"
-APP_VERSION: str = "0.6.0"
-APP_DESCRIPTION: str = "대학생 특화 LLM+MCP 로컬 AI 어시스턴트 (Task + Calendar + RAG + 크롤링)"
+APP_VERSION: str = "0.7.0"
+APP_DESCRIPTION: str = "대학생 특화 LLM+MCP 로컬 AI 어시스턴트 (Task + Calendar + 실시간 크롤링 검색)"

@@ -137,12 +137,12 @@ with tab_chat:
     btn_cols = st.columns(4)
     if btn_cols[0].button("📅 오늘 일정 보여줘"):
         st.session_state.quick_prompt = "오늘 일정 보여줘"
-    if btn_cols[1].button("⏰ 마감 임박 과제 확인"):
+    if btn_cols[1].button("⏰ 마감 임박 과제"):
         st.session_state.quick_prompt = "이번 주 마감인 과제 알려줘"
-    if btn_cols[2].button("🕷️ 학과 공지 크롤링"):
-        st.session_state.quick_prompt = "학과 공지사항 크롤링해줘"
-    if btn_cols[3].button("🔍 공지 검색"):
-        st.session_state.quick_prompt = "최신 공지사항 검색해줘"
+    if btn_cols[2].button("🔍 장학금 공지 검색"):
+        st.session_state.quick_prompt = "장학금 공지사항 찾아줘"
+    if btn_cols[3].button("🗑️ 저장 공지 삭제"):
+        st.session_state.quick_prompt = "저장된 공지사항 삭제해줘"
 
     # 사용자 입력
     user_input = st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓")

@@ -26,11 +26,11 @@
       "status": "active"
     },
     "rag_server": {
-      "description": "공지사항 RAG 검색 + 크롤링 MCP 서버",
+      "description": "공지사항 실시간 크롤링 검색 + 데이터 관리 MCP 서버",
       "module": "mcp_servers.rag_server",
       "tools": [
         "search_university_notices",
-        "crawl_department_notices",
+        "clear_notice_data",
         "load_notice_data",
         "get_notice_stats"
       ],

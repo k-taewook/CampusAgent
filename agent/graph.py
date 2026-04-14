@@ -35,12 +35,14 @@ def _create_llm():
         return ChatGoogleGenerativeAI(
             model=model_name,
             temperature=LLM_TEMPERATURE,
+            max_retries=4,
         )
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
             temperature=LLM_TEMPERATURE,
+            max_retries=4,
         )
     return None
 
