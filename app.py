@@ -134,12 +134,14 @@ with tab_chat:
 
     # ── ⚡ 원클릭 빠른 시작 버튼 ──
     st.markdown("💡 **추천 명령어**")
-    btn_cols = st.columns(3)
+    btn_cols = st.columns(4)
     if btn_cols[0].button("📅 오늘 일정 보여줘"):
         st.session_state.quick_prompt = "오늘 일정 보여줘"
     if btn_cols[1].button("⏰ 마감 임박 과제 확인"):
         st.session_state.quick_prompt = "이번 주 마감인 과제 알려줘"
-    if btn_cols[2].button("🔍 최신 학사 공지 검색"):
+    if btn_cols[2].button("🕷️ 학과 공지 크롤링"):
+        st.session_state.quick_prompt = "학과 공지사항 크롤링해줘"
+    if btn_cols[3].button("🔍 공지 검색"):
         st.session_state.quick_prompt = "최신 공지사항 검색해줘"
 
     # 사용자 입력
