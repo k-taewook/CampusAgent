@@ -16,10 +16,9 @@ from rag.embedder import DocumentEmbedder
 @tool
 def search_university_notices(query: str, n_results: int = 5) -> str:
     """
-    학과 공지사항을 검색합니다.
-    ChromaDB에 관련 데이터가 있으면 즉시 반환하고,
-    없으면 홈페이지 검색 기능으로 1페이지 전체를 크롤링하여 ChromaDB에 저장한 뒤 반환합니다.
-    사용자가 '장학금 공지사항 찾아줘', '휴강 공지 있어?' 등을 요청하면 이 도구를 사용하세요.
+    **학과 공지사항**을 검색합니다 (인하공업전문대학 컴퓨터시스템공학과).
+    학과 홈페이지에서 실시간 크롤링하여 관련 공지를 반환합니다.
+    사용자가 '학과 공지', '과 공지', '학과 장학금', '수업 공지' 등을 요청하면 이 도구를 사용하세요.
 
     Args:
         query: 검색 키워드 (예: "장학금", "수강 변경", "졸업 요건", "휴강")
@@ -50,7 +49,7 @@ def search_university_notices(query: str, n_results: int = 5) -> str:
         if relevant_cached:
             # ChromaDB 캐시 결과 반환
             header = (
-                f"🔍 **'{query}' 관련 공지사항** (저장된 데이터에서 검색)\n"
+                f"🔍 **'{query}' 관련 학과 공지사항** (저장된 데이터에서 검색)\n"
                 f"{'─' * 40}\n\n"
             )
             items = []
@@ -77,8 +76,8 @@ def search_university_notices(query: str, n_results: int = 5) -> str:
 
         if not crawled:
             return (
-                f"🔍 '{query}' 관련 공지사항을 찾을 수 없습니다.\n\n"
-                "학교 홈페이지 접속에 문제가 있거나, "
+                f"🔍 '{query}' 관련 학과 공지사항을 찾을 수 없습니다.\n\n"
+                "학과 홈페이지 접속에 문제가 있거나, "
                 "해당 키워드와 일치하는 공지가 없을 수 있습니다."
             )
 
@@ -109,8 +108,8 @@ def search_university_notices(query: str, n_results: int = 5) -> str:
         display = crawled[:n_results]
 
         header = (
-            f"🔍 **'{query}' 관련 공지사항**\n"
-            f"   홈페이지 검색 결과 **{len(crawled)}건** 수집 · ChromaDB 저장 완료 "
+            f"🔍 **'{query}' 관련 학과 공지사항**\n"
+            f"   학과 홈페이지 검색 결과 **{len(crawled)}건** 수집 · ChromaDB 저장 완료 "
             f"(상위 {len(display)}건 표시)\n"
             f"{'─' * 40}\n\n"
         )
@@ -142,7 +141,103 @@ def search_university_notices(query: str, n_results: int = 5) -> str:
             "`pip install requests beautifulsoup4` 를 실행해주세요."
         )
     except Exception as e:
-        return f"❌ 공지사항 검색 실패: {e}"
+        return f"❌ 학과 공지사항 검색 실패: {e}"
+
+
+@tool
+def search_school_notices(query: str, n_results: int = 5) -> str:
+    """
+    **학교 대표 홈페이지 공지사항**을 검색합니다 (인하공업전문대학교 전체 공지).
+    대표 홈페이지에서 실시간 크롤링하여 관련 공지를 반환합니다.
+    학과 공지가 아닌 학교 전체 공지를 원할 때 사용하세요.
+    사용자가 '학교 공지', '대학 공지', '학교 장학금', '등록금', '학사일정', '학교 행사' 등을 요청하면 이 도구를 사용하세요.
+
+    Args:
+        query: 검색 키워드 (예: "장학금", "등록금 납부", "학사일정", "채용")
+        n_results: 반환할 최대 결과 수 (기본값: 5)
+
+    Returns:
+        검색 결과 문자열
+    """
+    try:
+        from rag.crawler import search_school_notices_live, _extract_keywords
+        from datetime import datetime
+
+        # ── 1단계: 대표 홈페이지에서 실시간 크롤링 ──
+        crawled = search_school_notices_live(
+            query=query,
+            pages=1,
+            max_results=None,  # 1페이지 전체
+        )
+
+        if not crawled:
+            return (
+                f"🔍 '{query}' 관련 학교 공지사항을 찾을 수 없습니다.\n\n"
+                "대표 홈페이지 접속에 문제가 있거나, "
+                "해당 키워드와 일치하는 공지가 없을 수 있습니다."
+            )
+
+        # ── 2단계: 크롤링 결과 전체를 ChromaDB에 저장 ──
+        keywords = _extract_keywords(query)
+        main_keyword = keywords[0] if keywords else query
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+
+        raw_docs = []
+        for idx, r in enumerate(crawled):
+            raw_docs.append({
+                "id": f"school_{main_keyword}_{timestamp}_{idx}",
+                "title": r["title"],
+                "content": r["content"],
+                "date": r["date"],
+                "category": r["category"],
+                "source": "인하공업전문대학 대표 홈페이지",
+                "url": r.get("url", ""),
+                "full_text": f"[{r['category']}] {r['title']}\n{r['content']}",
+            })
+
+        chunker = SimpleTextChunker(chunk_size=500, chunk_overlap=50)
+        chunked = chunker.split_documents(raw_docs)
+        embedder = DocumentEmbedder()
+        embedder.embed_and_store(chunked)
+
+        # ── 3단계: 크롤링 결과 반환 (상위 n_results건) ──
+        display = crawled[:n_results]
+
+        header = (
+            f"🏫 **'{query}' 관련 학교 공지사항** (대표 홈페이지)\n"
+            f"   검색 결과 **{len(crawled)}건** 수집 · ChromaDB 저장 완료 "
+            f"(상위 {len(display)}건 표시)\n"
+            f"{'─' * 40}\n\n"
+        )
+
+        items = []
+        for i, r in enumerate(display, 1):
+            attach_info = ""
+            if r.get("attachments"):
+                attach_names = [a["name"] for a in r["attachments"]]
+                attach_info = f"\n   📎 첨부: {', '.join(attach_names)}"
+
+            url = r.get("url", "")
+            items.append(
+                f"📌 **{i}. {r['title']}**\n"
+                f"   📅 {r['date'] or '날짜 없음'} | "
+                f"📂 {r['category']} | "
+                f"👁️ 조회수 {r.get('views', '-')}\n"
+                f"   📄 {r['content'][:300]}"
+                f"{'...' if len(r['content']) > 300 else ''}"
+                f"{attach_info}\n"
+                + (f"   🔗 {url}" if url else "")
+            )
+
+        return header + "\n\n".join(items)
+
+    except ImportError:
+        return (
+            "❌ 크롤링 모듈을 불러올 수 없습니다.\n"
+            "`pip install requests beautifulsoup4` 를 실행해주세요."
+        )
+    except Exception as e:
+        return f"❌ 학교 공지사항 검색 실패: {e}"
 
 
 @tool
@@ -224,7 +319,7 @@ def get_notice_stats() -> str:
             return (
                 "📊 현재 저장된 공지사항이 없습니다.\n\n"
                 "💡 '장학금 공지 찾아줘'처럼 요청하면 "
-                "학과 홈페이지에서 실시간으로 검색합니다!"
+                "학과/학교 홈페이지에서 실시간으로 검색합니다!"
             )
         return f"📊 **공지사항 RAG 현황**\n   💾 저장된 문서(청크): {count}건"
     except Exception as e:
@@ -234,7 +329,9 @@ def get_notice_stats() -> str:
 # 에이전트에 바인딩할 도구 리스트
 RAG_TOOLS = [
     search_university_notices,
+    search_school_notices,
     clear_notice_data,
     load_notice_data,
     get_notice_stats,
 ]
+
