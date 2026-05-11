@@ -57,3 +57,28 @@ def test_clear_conversation_history():
     assert clear_conversation_history("test_session") is True
     assert load_recent_conversation_messages("test_session") == []
     assert get_latest_memory_summary("test_session") is None
+
+
+def test_invalid_role_rejected():
+    """유효하지 않은 role은 ValueError"""
+    with pytest.raises(ValueError):
+        save_conversation_message("test_session", "bot", "내용")
+
+
+def test_empty_content_rejected():
+    """빈 content는 ValueError"""
+    with pytest.raises(ValueError):
+        save_conversation_message("test_session", "user", "   ")
+
+
+def test_clear_preserves_session_row():
+    """clear 후에도 세션 row 자체는 남아 있음"""
+    save_conversation_message("test_session", "user", "안녕")
+    clear_conversation_history("test_session")
+    session = get_or_create_conversation_session("test_session")
+    assert session["id"] == "test_session"
+
+
+def test_clear_nonexistent_returns_false():
+    """메시지·요약이 없는 세션을 clear하면 False"""
+    assert clear_conversation_history("없는_세션") is False

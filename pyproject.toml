@@ -1,6 +1,6 @@
 [project]
 name = "campus-agent"
-version = "0.6.0"
+version = "0.9.0"
 description = "대학생 특화 LLM+MCP 로컬 어시스턴트 (Gemini/OpenAI 지원)"
 readme = "README.md"
 requires-python = ">=3.10"

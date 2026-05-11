@@ -489,3 +489,80 @@ ALL_TOOLS = TASK_TOOLS + CALENDAR_TOOLS + RAG_TOOLS + STUDENT_INFO_TOOLS
 - 장기기억으로 앱 재시작 후에도 대화 맥락을 이어갈 수 있게 했다.
 - 대학생 정보 검색으로 CampusAgent의 활용 범위를 넓혔다.
 - 11~13주차에는 각 정보 영역의 실시간 수집 범위를 점진적으로 확장할 계획이다.
+
+---
+
+## 12. 10주차 현재 상태 (2026-05-11 기준)
+
+이 문서(§1~§11)는 구현 전 계획서로 작성된 상태이다. 실제 작업 결과 아래 항목들이 이미 코드에 반영되어 있음을 확인하였다.
+
+| 항목 | 실제 위치 | 상태 |
+|---|---|---|
+| `conversation_sessions / messages / summaries` 테이블 3개 | `database/db.py:65-94` | ✅ 구현됨 |
+| 장기기억 CRUD 함수 6개 | `database/db.py:128-267` | ✅ 구현됨 |
+| 앱 시작 시 최근 메시지 복원 | `app.py:131-139` | ✅ 구현됨 |
+| user/assistant 메시지 DB 저장 | `app.py:183, 257-264` | ✅ 구현됨 |
+| `memory_summary`를 시스템 프롬프트에 주입 | `agent/graph.py:88,94`, `agent/prompts.py:67` | ✅ 구현됨 |
+| `mcp_servers/student_info_server.py` + 3개 도구 | 파일 전체 | ✅ 구현됨 |
+| `data/student_info_samples.json` (3개 카테고리, 각 2건 이상) | 파일 존재 | ✅ 구현됨 |
+| `agent/graph.py`에 `STUDENT_INFO_TOOLS` 연결 | `agent/graph.py:23,26` | ✅ 구현됨 |
+| `agent/prompts.py`에 새 도구 사용 규칙 + v0.9.0 표기 | `agent/prompts.py:40-43,76-81,84` | ✅ 구현됨 |
+| `config/mcp_config.json` 도구 목록 동기화 | `student_info_server` 항목 포함 | ✅ 구현됨 |
+
+## 13. 10주차 체크리스트
+
+### 코드 보강
+
+- [x] `tests/test_memory.py` 추가 (7개 테스트, 2026-05-11 통과)
+- [x] `tests/test_student_info.py` 추가 (2개 테스트, 2026-05-11 통과)
+- [x] 버전 표기 통일: `pyproject.toml` / `config/settings.py` / `agent/prompts.py` 모두 0.9.0
+
+### 수동 검증 (앱 실행 필요)
+
+- [ ] 앱 부팅 후 SQLite 3개 테이블 자동 생성 확인
+- [ ] 채팅 2~3턴 진행 후 `conversation_messages` row 누적 확인
+- [ ] 앱 종료 → 재실행 → 이전 대화 복원 확인
+- [ ] `load_student_info_data` 호출 후 ChromaDB 카운트 증가 확인
+- [ ] "편입학 정보 알려줘" → transfer 결과 포함 확인
+- [ ] "국가장학금 제도 찾아줘" → policy 결과 포함 확인
+- [ ] "소프트웨어 공모전 추천해줘" → contest 결과 포함 확인
+- [ ] `search_university_notices` / `search_school_notices` 회귀 미발생 확인
+
+## 14. Context Notes (의사결정 기록)
+
+**2026-05-11**
+
+- **요약 메모리 자동 트리거 미구현**: `save_memory_summary` 함수와 DB 테이블은 완성되어 있으나, 어떤 코드도 이를 호출하지 않는다. 따라서 현재는 `memory_summary`가 항상 "저장된 장기기억 요약 없음"으로 시스템 프롬프트에 주입된다. 자동 요약 생성(메시지 N개 누적 시 LLM 요약 → `save_memory_summary` 호출) 설계는 14주차 개인화 추천 단계로 명시적으로 미뤘다. 발표 시 "요약 메모리는 설계 완료, 활성화는 14주차"로 설명한다.
+- **버전 0.9.0으로 통일**: 9주차 실습일지 기준 장기기억 설계 + 10주차 student_info 검색 1차 구현까지 반영된 상태이므로 0.9.0이 가장 적합하다고 판단. `pyproject.toml`(0.6.0→0.9.0), `config/settings.py`(0.7.0→0.9.0), `agent/prompts.py`(이미 v0.9.0) 세 곳을 맞췄다.
+- **MemorySaver와 SQLite 장기기억 역할 분리**: `MemorySaver`는 현재 실행 중인 LangGraph 세션의 단기 메모리(앱이 살아 있는 동안), SQLite는 앱 재시작 이후에도 유지되는 장기 기록. 두 계층은 `app.py`의 `graph_memory_hydrated` 플래그를 통해 첫 번째 turn에만 DB 메시지를 그래프에 주입하고 이후는 MemorySaver가 자동 누적하도록 역할을 나눴다.
+- **ChromaDB 컬렉션 분리 미결**: 공지사항(`search_university_notices`)과 대학생 정보(`search_student_info`)가 같은 `university_notices` 컬렉션을 공유한다. 현재는 `category` metadata 필드로 구분하지만 완전한 분리는 아니다. 11주차 이후 검토 항목으로 남긴다.
+
+## 15. 검증 결과
+
+### 자동 테스트 (2026-05-11)
+
+```
+42 passed, 1 warning in 9.39s
+```
+
+| 파일 | 테스트 수 | 결과 |
+|---|---|---|
+| `test_task.py` | 13 | ✅ 통과 |
+| `test_calendar.py` | 12 | ✅ 통과 |
+| `test_memory.py` | 7 | ✅ 통과 |
+| `test_rag.py` | 8 | ✅ 통과 |
+| `test_student_info.py` | 2 | ✅ 통과 |
+
+DeprecationWarning 1건: Python 3.14와 chromadb의 `asyncio.iscoroutinefunction` 사용 차이. 기능에 영향 없음.
+
+### 수동 검증
+
+*앱 실행 후 결과를 여기에 기록한다.*
+
+## 16. 11주차로 넘기는 항목
+
+- `tests/test_agent.py` 작성: LangGraph tool routing, API 키 없음 fallback, `current_context` 반영 여부
+- 자동 요약 메모리 트리거 설계: 메시지 N개 누적 시 LLM 요약 생성 → `save_memory_summary` 호출
+- ChromaDB 컬렉션 분리 검토: `university_notices` 컬렉션을 공지/대학생 정보로 구분
+- `research.md` 경로 갱신: `C:\workspace\CampusAgent` → `C:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent`
+- 편입학 고도화 (`md_file/week_11_plan.md` 신규 작성)
