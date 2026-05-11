@@ -62,6 +62,37 @@ def init_sqlite_db():
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS conversation_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT DEFAULT '기본 세션',
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS conversation_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (session_id) REFERENCES conversation_sessions(id)
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS memory_summaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (session_id) REFERENCES conversation_sessions(id)
+    );
+    """)
+
     conn.commit()
     conn.close()
     print("✅ SQLite 세팅 완료")
@@ -89,6 +120,151 @@ def get_user_setting(key: str, default: str = "") -> str:
     if row:
         return row["value"]
     return default
+
+# ──────────────────────────────────────
+# 장기기억 / 대화 이력 CRUD
+# ──────────────────────────────────────
+
+def get_or_create_conversation_session(
+    session_id: str,
+    title: str = "기본 세션",
+) -> dict:
+    """대화 세션을 조회하고 없으면 생성"""
+    conn = _get_connection()
+    row = conn.execute(
+        "SELECT * FROM conversation_sessions WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+
+    if row is None:
+        conn.execute(
+            "INSERT INTO conversation_sessions (id, title) VALUES (?, ?)",
+            (session_id, title),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM conversation_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+    else:
+        conn.execute(
+            "UPDATE conversation_sessions SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (session_id,),
+        )
+        conn.commit()
+
+    conn.close()
+    return dict(row)
+
+
+def save_conversation_message(session_id: str, role: str, content: str) -> int:
+    """대화 메시지를 장기기억 DB에 저장하고 message id 반환"""
+    if role not in {"user", "assistant", "system", "tool"}:
+        raise ValueError(f"유효하지 않은 메시지 role입니다: {role}")
+    if not content or not str(content).strip():
+        raise ValueError("저장할 메시지 내용이 비어 있습니다.")
+
+    get_or_create_conversation_session(session_id)
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO conversation_messages (session_id, role, content)
+        VALUES (?, ?, ?)
+        """,
+        (session_id, role, str(content)),
+    )
+    conn.execute(
+        "UPDATE conversation_sessions SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+        (session_id,),
+    )
+    conn.commit()
+    message_id = cursor.lastrowid
+    conn.close()
+    return int(message_id)
+
+
+def load_recent_conversation_messages(
+    session_id: str,
+    limit: int = 20,
+) -> List[dict]:
+    """최근 대화 메시지를 시간순으로 반환"""
+    conn = _get_connection()
+    rows = conn.execute(
+        """
+        SELECT id, session_id, role, content, created_at
+        FROM conversation_messages
+        WHERE session_id = ?
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (session_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in reversed(rows)]
+
+
+def save_memory_summary(session_id: str, summary: str) -> int:
+    """대화 요약 메모리를 저장하고 summary id 반환"""
+    if not summary or not summary.strip():
+        raise ValueError("저장할 요약 내용이 비어 있습니다.")
+
+    get_or_create_conversation_session(session_id)
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO memory_summaries (session_id, summary)
+        VALUES (?, ?)
+        """,
+        (session_id, summary.strip()),
+    )
+    conn.execute(
+        "UPDATE conversation_sessions SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+        (session_id,),
+    )
+    conn.commit()
+    summary_id = cursor.lastrowid
+    conn.close()
+    return int(summary_id)
+
+
+def get_latest_memory_summary(session_id: str) -> Optional[str]:
+    """최근 요약 메모리 반환"""
+    conn = _get_connection()
+    row = conn.execute(
+        """
+        SELECT summary
+        FROM memory_summaries
+        WHERE session_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (session_id,),
+    ).fetchone()
+    conn.close()
+    return row["summary"] if row else None
+
+
+def clear_conversation_history(session_id: str) -> bool:
+    """특정 세션의 대화 메시지와 요약 메모리 삭제"""
+    conn = _get_connection()
+    cursor_messages = conn.execute(
+        "DELETE FROM conversation_messages WHERE session_id = ?",
+        (session_id,),
+    )
+    cursor_summaries = conn.execute(
+        "DELETE FROM memory_summaries WHERE session_id = ?",
+        (session_id,),
+    )
+    conn.execute(
+        "UPDATE conversation_sessions SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+        (session_id,),
+    )
+    conn.commit()
+    deleted = cursor_messages.rowcount > 0 or cursor_summaries.rowcount > 0
+    conn.close()
+    return deleted
 
 # ──────────────────────────────────────
 # 과제 CRUD

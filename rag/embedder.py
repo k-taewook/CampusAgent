@@ -46,6 +46,8 @@ class DocumentEmbedder:
                 "category": doc.get("category", ""),
                 "source": doc.get("source", ""),
                 "url": doc.get("url", ""),
+                "deadline": doc.get("deadline", ""),
+                "target": doc.get("target", ""),
                 "chunk_index": doc.get("chunk_index", 0),
             }
             for doc in chunked_docs

@@ -72,6 +72,8 @@ def search_notices(
                 "category": metadata.get("category", ""),
                 "source": metadata.get("source", ""),
                 "url": metadata.get("url", ""),
+                "deadline": metadata.get("deadline", ""),
+                "target": metadata.get("target", ""),
                 "distance": round(distance, 4),
                 "relevance": round(1 - distance, 4),  # 코사인 유사도
             })

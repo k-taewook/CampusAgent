@@ -15,6 +15,10 @@ from database.db import (
     get_user_setting,
     set_user_setting,
     update_assignment_status,
+    get_or_create_conversation_session,
+    load_recent_conversation_messages,
+    save_conversation_message,
+    get_latest_memory_summary,
 )
 from rag.retriever import init_chromadb, get_notice_count
 import pandas as pd
@@ -32,6 +36,13 @@ st.set_page_config(
     page_icon="🎓",
     layout="wide",
 )
+
+CONVERSATION_SESSION_ID = "streamlit_session"
+
+if "db_initialized" not in st.session_state:
+    init_sqlite_db()
+    get_or_create_conversation_session(CONVERSATION_SESSION_ID, "Streamlit 기본 세션")
+    st.session_state.db_initialized = True
 
 # ──────────────────────────────────────
 # 사이드바: 시스템 정보 + 대시보드
@@ -102,6 +113,9 @@ with st.sidebar:
         "- 자료구조 과제 추가해줘\n"
         "- 내일 9시에 수업 추가\n"
         "- 장학금 공지 검색해줘\n"
+        "- 편입학 정보 알려줘\n"
+        "- 국가장학금 제도 찾아줘\n"
+        "- 소프트웨어 공모전 추천해줘\n"
         "- 시험 D-day 확인\n"
         "- 이번 주 일정 보여줘"
     )
@@ -114,9 +128,17 @@ st.subheader("대학생 특화 로컬 AI 어시스턴트")
 
 # 세션 상태 초기화
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    restored_messages = load_recent_conversation_messages(
+        CONVERSATION_SESSION_ID,
+        limit=20,
+    )
+    st.session_state.messages = [
+        {"role": msg["role"], "content": msg["content"]}
+        for msg in restored_messages
+        if msg["role"] in {"user", "assistant"}
+    ]
+    st.session_state.graph_memory_hydrated = not bool(st.session_state.messages)
 if "graph" not in st.session_state:
-    init_sqlite_db()
     init_chromadb()
     st.session_state.graph = build_graph()
 
@@ -157,11 +179,16 @@ with tab_chat:
             # 사용자 메시지 표시
             st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
+        try:
+            save_conversation_message(CONVERSATION_SESSION_ID, "user", prompt)
+        except Exception:
+            pass
 
         from datetime import datetime
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_major_ctx = get_user_setting("major", "미설정")
         user_grade_ctx = get_user_setting("grade", "미설정")
+        memory_summary_ctx = get_latest_memory_summary(CONVERSATION_SESSION_ID) or "저장된 장기기억 요약 없음"
         config = {"configurable": {"thread_id": "streamlit_session"}}
 
         with chat_container:
@@ -169,19 +196,30 @@ with tab_chat:
                 with st.spinner("CampusAgent가 생각 중... 🤔"):
                     last_msg_content = ""
                     try:
+                        if not st.session_state.get("graph_memory_hydrated", True):
+                            graph_messages = [
+                                (msg["role"], msg["content"])
+                                for msg in st.session_state.messages
+                                if msg["role"] in {"user", "assistant"}
+                            ]
+                        else:
+                            graph_messages = [("user", prompt)]
+
                         # AgentState에 맞춰서 messages와 current_context 전달
                         # MemorySaver가 켜져 있으므로 이전 대화들은 그래프 내부에서 자동 누적됨
                         for event in st.session_state.graph.stream(
                             {
-                                "messages": [("user", prompt)],
+                                "messages": graph_messages,
                                 "current_context": {
                                     "current_time": current_time_str,
                                     "user_major": user_major_ctx,
-                                    "user_grade": user_grade_ctx
+                                    "user_grade": user_grade_ctx,
+                                    "memory_summary": memory_summary_ctx
                                 }
                             }, 
                             config
                         ):
+                            st.session_state.graph_memory_hydrated = True
                             for node_name, node_state in event.items():
                                 if "messages" in node_state and node_state["messages"]:
                                     last_message = node_state["messages"][-1]
@@ -201,9 +239,13 @@ with tab_chat:
                         if last_msg_content:
                             st.markdown(last_msg_content)
                             # Actionable RAG 제안 버튼
-                            if "공지" in prompt or "검색" in prompt:
+                            actionable_keywords = [
+                                "공지", "검색", "편입", "전공심화", "국가장학",
+                                "국가근로", "학자금", "공모전", "대외활동", "인턴",
+                            ]
+                            if any(keyword in prompt for keyword in actionable_keywords):
                                 if st.button("✅ 이 내용을 바탕으로 캘린더나 과제에 등록하기", key="rag_action"):
-                                    st.session_state.quick_prompt = "방금 찾은 공지사항 정보를 바탕으로 주요 마감일이나 일정을 내 캘린더/과제에 등록해줘."
+                                    st.session_state.quick_prompt = "방금 찾은 정보를 바탕으로 주요 마감일이나 일정을 내 캘린더/과제에 등록해줘."
                                     st.rerun()
                         else:
                             last_msg_content = "처리가 완료되었지만 응답 내용이 비어있습니다."
@@ -212,12 +254,28 @@ with tab_chat:
                         st.session_state.messages.append(
                             {"role": "assistant", "content": last_msg_content}
                         )
+                        try:
+                            save_conversation_message(
+                                CONVERSATION_SESSION_ID,
+                                "assistant",
+                                last_msg_content,
+                            )
+                        except Exception:
+                            pass
                     except Exception as e:
                         error_msg = f"❌ 오류가 발생했습니다: {e}"
                         st.error(error_msg)
                         st.session_state.messages.append(
                             {"role": "assistant", "content": error_msg}
                         )
+                        try:
+                            save_conversation_message(
+                                CONVERSATION_SESSION_ID,
+                                "assistant",
+                                error_msg,
+                            )
+                        except Exception:
+                            pass
 
 with tab_dashboard:
     st.markdown("### 📊 과제 대시보드")

@@ -20,9 +20,10 @@ from config.settings import (
 from mcp_servers.task_server import TASK_TOOLS
 from mcp_servers.calendar_server import CALENDAR_TOOLS
 from mcp_servers.rag_server import RAG_TOOLS
+from mcp_servers.student_info_server import STUDENT_INFO_TOOLS
 
 # 전체 도구 리스트 통합
-ALL_TOOLS = TASK_TOOLS + CALENDAR_TOOLS + RAG_TOOLS
+ALL_TOOLS = TASK_TOOLS + CALENDAR_TOOLS + RAG_TOOLS + STUDENT_INFO_TOOLS
 
 
 def _create_llm():
@@ -84,11 +85,13 @@ def build_graph():
             current_time = context_data.get("current_time", "알 수 없음")
             user_major = context_data.get("user_major", "미설정")
             user_grade = context_data.get("user_grade", "미설정")
+        memory_summary = context_data.get("memory_summary", "저장된 장기기억 요약 없음")
             
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             current_time=current_time,
             user_major=user_major,
-            user_grade=user_grade
+            user_grade=user_grade,
+            memory_summary=memory_summary,
         )
         system_message = SystemMessage(content=system_prompt)
 

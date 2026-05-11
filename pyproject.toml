@@ -21,3 +21,11 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = [
+    "agent",
+    "config",
+    "database",
+    "mcp_servers",
+    "rag",
+]
