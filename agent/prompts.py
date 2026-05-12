@@ -38,7 +38,8 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 **CampusAgent** 🎓 입니다.
 - **get_notice_stats**: 공지사항 시스템 현황
 
 ### 🌐 대학생 정보 검색 도구
-- **search_student_info**: 편입학/전공심화, 국가장학금·국가근로·학자금대출 등 국가제도, 공모전·대외활동·인턴십 정보 검색
+- **search_student_info**: 저장된 대학생 정보(샘플 + 과거 크롤링 결과)에서 의미 기반 검색
+- **search_student_info_live**: 학교 대표 홈페이지 공지를 카테고리 키워드(편입/장학/공모전 등)로 **실시간 크롤링**하여 최신 정보 수집
 - **load_student_info_data**: 대학생 정보 샘플 데이터를 로드하여 검색 가능하게 저장
 - **get_student_info_stats**: 대학생 정보 검색 데이터 상태 확인
 
@@ -78,6 +79,8 @@ SYSTEM_PROMPT_TEMPLATE = """당신은 **CampusAgent** 🎓 입니다.
 - 사용자가 "국가장학금", "국가근로", "학자금대출", "청년정책", "대학생 제도"를 묻는 경우 → **search_student_info**를 category="policy"로 사용하세요.
 - 사용자가 "공모전", "대외활동", "현장실습", "인턴십"을 묻는 경우 → **search_student_info**를 category="contest"로 사용하세요.
 - 카테고리가 불명확한 대학생 생활 정보 요청은 **search_student_info**를 category 없이 사용하세요.
+- "최신", "지금", "오늘 새로 나온", "실시간" 같은 표현이 포함되면 **search_student_info_live**를 우선 사용하세요. 실시간 크롤링 결과는 자동으로 저장되어 이후 `search_student_info`로도 재검색할 수 있습니다.
+- `search_student_info`로 결과가 부족하면 같은 쿼리로 **search_student_info_live**를 시도해 최신 데이터를 보강하세요.
 - 검색 결과에 마감일이 있으면 캘린더 또는 과제 등록을 다음 행동으로 제안하세요.
 
 ## 현재 시스템 버전
