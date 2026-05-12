@@ -423,9 +423,241 @@ def search_student_info_live(
         return f"❌ 대학생 정보 실시간 검색 실패: {e}"
 
 
+def _store_external_results(results: list[dict], label: str) -> None:
+    """외부 소스 크롤링 결과를 ChromaDB에 upsert."""
+    if not results:
+        return
+    timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    raw_docs = []
+    for idx, item in enumerate(results):
+        cat = item.get("category", "general")
+        title = item.get("title", "제목 없음")
+        content = item.get("content", "")
+        raw_docs.append({
+            "id": f"ext_{label}_{timestamp}_{idx}",
+            "title": title,
+            "content": content,
+            "date": item.get("date", ""),
+            "category": cat,
+            "source": item.get("source", "외부 공공기관"),
+            "url": item.get("url", ""),
+            "deadline": item.get("date", ""),
+            "target": "대학생",
+            "full_text": f"[{STUDENT_INFO_CATEGORIES.get(cat, cat)}] {title}\n{content}",
+        })
+    chunker = SimpleTextChunker(chunk_size=500, chunk_overlap=50)
+    chunked = chunker.split_documents(raw_docs)
+    embedder = DocumentEmbedder()
+    embedder.embed_and_store(chunked)
+
+
+def _format_external_items(results: list[dict], n_results: int) -> list[str]:
+    """외부 소스 결과를 포맷 문자열 리스트로 변환."""
+    lines = []
+    for i, item in enumerate(results[:n_results], 1):
+        url = item.get("url", "")
+        content = item.get("content", "")
+        summary = content[:280] + ("..." if len(content) > 280 else "")
+        cat = item.get("category", "")
+        cat_label = STUDENT_INFO_CATEGORIES.get(cat, cat or "분류 없음")
+        source = item.get("source", "")
+        deadline = item.get("date", "마감일 정보 없음") or "마감일 정보 없음"
+        lines.append(
+            f"📌 **{i}. {item.get('title', '제목 없음')}**\n"
+            f"   📂 분류: {cat_label}\n"
+            f"   📅 마감/기간: {deadline}\n"
+            f"   🏛️ 출처: {source}\n"
+            f"   📝 요약: {summary}\n"
+            + (f"   🔗 {url}" if url else "")
+        )
+    return lines
+
+
+@tool
+def search_transfer_by_school(school_name: str, n_results: int = 5) -> str:
+    """
+    특정 학교의 편입학 모집요강 정보를 어디가(adiga.kr)에서 검색합니다.
+    사용자가 "○○대 편입학 정보 찾아줘", "○○대 모집요강" 같이 학교명을 직접 언급하면 사용하세요.
+
+    Args:
+        school_name: 검색할 학교 이름 (예: "연세대", "한양대")
+        n_results: 반환할 최대 결과 수
+
+    Returns:
+        편입학 정보 문자열
+    """
+    try:
+        from rag.external_crawler import crawl_transfer_by_school as _crawl
+        results = _crawl(school_name=school_name, max_results=n_results)
+        if not results:
+            return (
+                f"🔍 '{school_name}' 편입학 정보를 찾지 못했습니다.\n\n"
+                f"어디가(https://www.adiga.kr)에서 직접 검색해보세요."
+            )
+        _store_external_results(results, "transfer")
+        items = _format_external_items(results, n_results)
+        header = (
+            f"🎓 **'{school_name}' 편입학 정보** (어디가 기준)\n"
+            f"   수집 {len(results)}건\n"
+            f"{'─' * 40}\n\n"
+        )
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 지원 마감일을 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 정확한 지원 조건은 반드시 학교 입학처 공식 사이트에서 재확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ 편입학 정보 검색 실패: {e}"
+
+
+@tool
+def search_scholarship_policy(query: str, n_results: int = 5) -> str:
+    """
+    온통청년 API로 국가장학금·청년지원 정책을 검색합니다.
+    사용자가 "최신 장학금 알려줘", "청년 정책 뭐 있어?" 처럼 외부 장학/정책 정보를 요청할 때 사용하세요.
+    API 키가 설정되지 않으면 설정 방법을 안내합니다.
+
+    Args:
+        query: 검색 키워드 (예: "국가장학금", "청년 주거 지원", "학자금대출")
+        n_results: 반환할 최대 결과 수
+
+    Returns:
+        청년정책 검색 결과 문자열
+    """
+    try:
+        from config.settings import YOUTH_CENTER_API_KEY
+        from rag.external_crawler import fetch_youth_policy
+
+        if not YOUTH_CENTER_API_KEY:
+            return (
+                "⚠️ 온통청년 API 키가 설정되지 않았습니다.\n\n"
+                "**API 키 발급 방법**\n"
+                "1. https://www.youthcenter.go.kr 접속 후 회원가입\n"
+                "2. 마이페이지 → 오픈(OPEN) API 메뉴에서 인증키 신청\n"
+                "3. `.env` 파일에 `YOUTH_CENTER_API_KEY=발급받은키` 추가 후 앱 재시작\n\n"
+                "💡 키 없이 검색하려면 `search_student_info`로 저장된 샘플 데이터를 조회하세요."
+            )
+
+        results = fetch_youth_policy(query=query, api_key=YOUTH_CENTER_API_KEY, display=n_results)
+        if not results:
+            return (
+                f"🔍 '{query}' 관련 청년정책을 찾지 못했습니다.\n\n"
+                "온통청년(https://www.youthcenter.go.kr)에서 직접 검색해보세요."
+            )
+        _store_external_results(results, "policy")
+        items = _format_external_items(results, n_results)
+        header = (
+            f"🏛️ **'{query}' 관련 청년정책/장학금** (온통청년 기준)\n"
+            f"   수집 {len(results)}건\n"
+            f"{'─' * 40}\n\n"
+        )
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 신청 기간이 있는 항목은 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 정확한 신청 조건은 반드시 출처 URL에서 재확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ 청년정책 검색 실패: {e}"
+
+
+@tool
+def search_job_intern(query: str, n_results: int = 5) -> str:
+    """
+    워크넷 공채속보 API로 채용공고를 검색합니다.
+    사용자가 "인턴십 공고 찾아줘", "소프트웨어 채용 알려줘" 처럼 외부 취업 정보를 요청할 때 사용하세요.
+    API 키가 설정되지 않으면 설정 방법을 안내합니다.
+
+    Args:
+        query: 검색 키워드 (예: "소프트웨어 인턴", "현장실습", "IT 채용")
+        n_results: 반환할 최대 결과 수
+
+    Returns:
+        채용정보 검색 결과 문자열
+    """
+    try:
+        from config.settings import WORKNET_API_KEY
+        from rag.external_crawler import fetch_worknet_jobs
+
+        if not WORKNET_API_KEY:
+            return (
+                "⚠️ 워크넷 API 키가 설정되지 않았습니다.\n\n"
+                "**API 키 발급 방법**\n"
+                "1. https://openapi.work.go.kr 접속 후 회원가입\n"
+                "2. API 서비스 신청 → **공채속보 API** 선택 (개인회원 신청 가능)\n"
+                "3. `.env` 파일에 `WORKNET_API_KEY=발급받은키` 추가 후 앱 재시작\n\n"
+                "💡 키 없이 검색하려면 `search_student_info`로 저장된 샘플 데이터를 조회하세요."
+            )
+
+        results = fetch_worknet_jobs(query=query, api_key=WORKNET_API_KEY, display=n_results)
+        if not results:
+            return (
+                f"🔍 '{query}' 관련 채용공고를 찾지 못했습니다.\n\n"
+                "워크넷(https://www.work.go.kr)에서 직접 검색해보세요."
+            )
+        _store_external_results(results, "job")
+        items = _format_external_items(results, n_results)
+        header = (
+            f"💼 **'{query}' 관련 채용/인턴십** (워크넷 기준)\n"
+            f"   수집 {len(results)}건\n"
+            f"{'─' * 40}\n\n"
+        )
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 지원 마감일을 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 정확한 지원 조건은 반드시 워크넷 원문에서 재확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ 채용정보 검색 실패: {e}"
+
+
+@tool
+def search_contest_external(query: str, n_results: int = 5) -> str:
+    """
+    K-스타트업(k-startup.go.kr)에서 창업지원·공모전 정보를 크롤링합니다.
+    사용자가 "창업 공모전 찾아줘", "K-스타트업 지원사업 알려줘" 처럼 외부 공모전을 요청할 때 사용하세요.
+
+    Args:
+        query: 검색 키워드 (예: "창업", "공모전", "AI")
+        n_results: 반환할 최대 결과 수
+
+    Returns:
+        공모전/창업지원 검색 결과 문자열
+    """
+    try:
+        from rag.external_crawler import crawl_kstartup_contest
+        results = crawl_kstartup_contest(query=query, max_results=n_results)
+        if not results:
+            return (
+                f"🔍 '{query}' 관련 K-스타트업 공모전을 찾지 못했습니다.\n\n"
+                "K-스타트업(https://www.k-startup.go.kr)에서 직접 확인해보세요."
+            )
+        _store_external_results(results, "contest")
+        items = _format_external_items(results, n_results)
+        header = (
+            f"🚀 **'{query}' 관련 창업지원/공모전** (K-스타트업 기준)\n"
+            f"   수집 {len(results)}건\n"
+            f"{'─' * 40}\n\n"
+        )
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 지원 마감일을 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 정확한 모집 조건은 반드시 K-스타트업 원문에서 재확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ K-스타트업 공모전 검색 실패: {e}"
+
+
 STUDENT_INFO_TOOLS = [
     search_student_info,
     search_student_info_live,
+    search_transfer_by_school,
+    search_scholarship_policy,
+    search_job_intern,
+    search_contest_external,
     load_student_info_data,
     get_student_info_stats,
 ]

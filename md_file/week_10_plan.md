@@ -566,3 +566,108 @@ DeprecationWarning 1건: Python 3.14와 chromadb의 `asyncio.iscoroutinefunction
 - ChromaDB 컬렉션 분리 검토: `university_notices` 컬렉션을 공지/대학생 정보로 구분
 - `research.md` 경로 갱신: `C:\workspace\CampusAgent` → `C:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent`
 - 편입학 고도화 (`md_file/week_11_plan.md` 신규 작성)
+
+## 17. 10주차 추가 작업: 외부 소스 대학생 정보 확장 ✅ 완료 (2026-05-12)
+
+추가 작업 기준일: 2026-05-12  
+배경: `search_student_info_live`가 인하공전 학교 공지만 크롤링하므로 타학교 편입학·외부 장학·취업·공모전 정보를 실제 해당 소스에서 가져오는 확장을 진행한다.
+
+### 17.1 추가할 외부 소스
+
+| 소스 | 접근 방식 | API 키 | 법적 안전성 |
+|------|---------|--------|-----------|
+| 어디가(adiga.kr) — 편입학 모집요강 | HTML 크롤링 | 불필요 | 공공기관 ✅ |
+| 온통청년(youthcenter.go.kr) — 장학/청년정책 | REST API | `YOUTH_CENTER_API_KEY` | 공공기관 ✅ |
+| 워크넷(work.go.kr) — 채용/인턴십 | REST API | `WORKNET_API_KEY` | 공공기관 ✅ |
+| K-스타트업(k-startup.go.kr) — 공모전 | HTML 크롤링 | 불필요 | 공공기관 ✅ |
+
+기존 `search_student_info_live`(인하공전 학교 공지 기반)는 그대로 유지한다.
+
+### 17.2 신규 생성 파일
+
+**`rag/external_crawler.py`**
+
+4개 외부 소스 크롤러를 담는 전용 파일. 각 함수는 `List[dict]` (title, content, date, url, source, category) 반환.
+
+```python
+def crawl_transfer_by_school(school_name: str, max_results: int = 5) -> List[dict]:
+    """어디가 편입학 검색 페이지를 HTML 파싱."""
+
+def fetch_youth_policy(query: str, api_key: str, page: int = 1, display: int = 5) -> List[dict]:
+    """온통청년 API: https://www.youthcenter.go.kr/opi/youthPlcyList.do"""
+
+def fetch_worknet_jobs(query: str, api_key: str, page: int = 1, display: int = 5) -> List[dict]:
+    """워크넷 API: https://openapi.work.go.kr/opi/opi/opia/wantedApi.do"""
+
+def crawl_kstartup_contest(query: str = "", max_results: int = 5) -> List[dict]:
+    """K-스타트업 공모전 목록 HTML 크롤링."""
+```
+
+공통 처리:
+- robots.txt 허용 경로만 접근
+- 요청 간 1초 딜레이 (기존 `REQUEST_DELAY` 패턴 그대로)
+- API 키 미설정 시 빈 리스트 반환 (호출 측에서 안내 메시지 처리)
+
+### 17.3 수정 파일
+
+**`config/settings.py`**
+```python
+YOUTH_CENTER_API_KEY: str = os.getenv("YOUTH_CENTER_API_KEY", "")
+WORKNET_API_KEY: str = os.getenv("WORKNET_API_KEY", "")
+```
+
+**`mcp_servers/student_info_server.py`** — 도구 4개 추가
+
+| 도구 | 설명 |
+|------|------|
+| `search_transfer_by_school(school_name)` | 어디가에서 특정 학교 편입학 정보 크롤링 |
+| `search_scholarship_policy(query)` | 온통청년 API로 장학금·청년정책 검색 |
+| `search_job_intern(query)` | 워크넷 API로 채용·인턴십 검색 |
+| `search_contest_external(query)` | K-스타트업에서 공모전·대외활동 크롤링 |
+
+각 도구 공통:
+- API 키 미설정 시 에러 대신 설정 안내 문자열 반환
+- 결과를 ChromaDB에 upsert (category 메타데이터 포함)
+- 출처 URL 포함 + "원문 재확인 권장" footer
+
+**`agent/prompts.py`** — 새 도구 사용 가이드 4줄 추가
+
+### 17.4 API 키 발급 방법 (사용자 안내)
+
+| 키 이름 | 발급처 | 소요 시간 |
+|---------|------|---------|
+| `YOUTH_CENTER_API_KEY` | youthcenter.go.kr → 마이페이지 → 오픈API 신청 | 즉시~1일 |
+| `WORKNET_API_KEY` | openapi.work.go.kr → 회원가입 후 신청 | 즉시~1일 |
+
+### 17.5 검증 시나리오
+
+1. API 키 없이 `search_scholarship_policy("국가장학금")` → 키 설정 안내 메시지 반환 (에러 없음)
+2. API 키 설정 후 동일 요청 → 온통청년 결과 반환
+3. `search_transfer_by_school("연세대")` → 어디가 결과 반환
+4. `search_job_intern("소프트웨어 인턴")` → 워크넷 결과 반환
+5. `search_contest_external("창업 공모전")` → K-스타트업 결과 반환
+6. `pytest tests/test_student_info.py` → 기존 4개 테스트 포함 전체 통과
+7. `pytest tests/` → 전체 44건 이상 통과 (회귀 없음)
+
+### 17.6 실제 검증 결과 (2026-05-12)
+
+| 항목 | 결과 |
+|------|------|
+| `pytest tests/test_student_info.py` | ✅ 8건 통과 (기존 4 + 신규 4) |
+| `pytest tests/` 전체 | ✅ 48건 통과 (회귀 없음) |
+| K-스타트업 실시간 크롤링 | ✅ 3건 정상 수집 확인 |
+| API 키 없이 온통청년 도구 호출 | ✅ 에러 없이 설정 안내 반환 |
+| API 키 없이 워크넷 도구 호출 | ✅ 에러 없이 설정 안내 반환 |
+| 어디가 편입학: 학교 레지스트리 없을 때 | ✅ fallback 안내 항목 반환 |
+
+**미완료 항목**: 온통청년 API 키, 워크넷 API 키 발급 후 실제 API 응답 검증 필요. 키 발급은 각 사이트에서 별도 진행.
+
+### 17.7 추가된 파일
+
+| 파일 | 내용 |
+|------|------|
+| `rag/external_crawler.py` (신규) | 어디가/온통청년/워크넷/K-스타트업 크롤러 |
+| `config/settings.py` | `YOUTH_CENTER_API_KEY`, `WORKNET_API_KEY` 추가 |
+| `mcp_servers/student_info_server.py` | 도구 4개 추가 (총 8종), 헬퍼 함수 2개 |
+| `agent/prompts.py` | 새 도구 안내 + 사용 가이드 추가 |
+| `tests/test_student_info.py` | 신규 테스트 4건 추가 |

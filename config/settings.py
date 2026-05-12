@@ -68,6 +68,13 @@ CHROMA_DB_DIR: str = os.getenv("CHROMA_DB_DIR", "chroma_db_storage")
 CHROMA_COLLECTION_NAME: str = "university_notices"
 
 # ──────────────────────────────────────
+# 외부 공공 API 키
+# 발급: youthcenter.go.kr 마이페이지 → 오픈API / openapi.work.go.kr 회원가입 후 신청
+# ──────────────────────────────────────
+YOUTH_CENTER_API_KEY: str = os.getenv("YOUTH_CENTER_API_KEY", "")
+WORKNET_API_KEY: str = os.getenv("WORKNET_API_KEY", "")
+
+# ──────────────────────────────────────
 # 앱 메타데이터
 # ──────────────────────────────────────
 APP_NAME: str = "CampusAgent"

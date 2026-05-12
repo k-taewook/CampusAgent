@@ -16,6 +16,10 @@ from mcp_servers.student_info_server import (
     load_student_info_data,
     search_student_info,
     search_student_info_live,
+    search_transfer_by_school,
+    search_scholarship_policy,
+    search_job_intern,
+    search_contest_external,
 )
 import mcp_servers.student_info_server as student_info_server
 
@@ -141,3 +145,64 @@ def test_search_student_info_live_with_mocked_crawler(monkeypatch):
         "n_results": 3,
     })
     assert "국가장학금" in auto
+
+
+def test_search_transfer_by_school_with_mock(monkeypatch):
+    """편입학 크롤러를 가짜로 대체하여 도구 흐름 검증."""
+    fake_results = [
+        {
+            "title": "연세대학교 2026 편입학 모집요강",
+            "content": "연세대학교 편입학 안내. 모집학과 및 지원 서류 확인 필요.",
+            "date": "2026-09-30",
+            "url": "https://www.adiga.kr/iphak/transfer/main.do",
+            "source": "어디가(adiga.kr) 편입학 정보",
+            "category": "transfer",
+        }
+    ]
+    import rag.external_crawler as ext
+    monkeypatch.setattr(ext, "crawl_transfer_by_school", lambda **kw: fake_results)
+
+    result = search_transfer_by_school.invoke({"school_name": "연세대", "n_results": 3})
+    assert "연세대" in result
+    assert "편입학" in result
+    assert "어디가" in result
+
+
+def test_search_scholarship_policy_no_api_key(monkeypatch):
+    """API 키 없을 때 안내 메시지 반환 (에러 없음)."""
+    import config.settings as cfg
+    monkeypatch.setattr(cfg, "YOUTH_CENTER_API_KEY", "")
+
+    result = search_scholarship_policy.invoke({"query": "국가장학금", "n_results": 3})
+    assert "API 키가 설정되지 않았습니다" in result
+    assert "YOUTH_CENTER_API_KEY" in result
+
+
+def test_search_job_intern_no_api_key(monkeypatch):
+    """워크넷 API 키 없을 때 안내 메시지 반환 (에러 없음)."""
+    import config.settings as cfg
+    monkeypatch.setattr(cfg, "WORKNET_API_KEY", "")
+
+    result = search_job_intern.invoke({"query": "소프트웨어 인턴", "n_results": 3})
+    assert "API 키가 설정되지 않았습니다" in result
+    assert "WORKNET_API_KEY" in result
+
+
+def test_search_contest_external_with_mock(monkeypatch):
+    """K-스타트업 크롤러를 가짜로 대체하여 도구 흐름 검증."""
+    fake_results = [
+        {
+            "title": "2026 AI 창업 공모전 모집",
+            "content": "기관: 창업진흥원\n마감: D-5",
+            "date": "D-5",
+            "url": "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing-view.do?bizPbancSn=12345",
+            "source": "K-스타트업 (창업진흥원)",
+            "category": "contest",
+        }
+    ]
+    import rag.external_crawler as ext
+    monkeypatch.setattr(ext, "crawl_kstartup_contest", lambda **kw: fake_results)
+
+    result = search_contest_external.invoke({"query": "AI 창업", "n_results": 3})
+    assert "창업" in result
+    assert "K-스타트업" in result
