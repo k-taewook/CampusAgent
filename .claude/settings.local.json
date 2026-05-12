@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l /c/Users/kimka/OneDrive/Documents/GitHub/CampusAgent/tests/*.py)"
+      "Bash(wc -l /c/Users/kimka/OneDrive/Documents/GitHub/CampusAgent/tests/*.py)",
+      "PowerShell(Get-ExecutionPolicy *)",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -c \"import pydantic; print\\(pydantic.__version__\\)\")",
+      "PowerShell(venv\\\\Scripts\\\\python.exe --version)",
+      "PowerShell(python --version)",
+      "PowerShell(py *)",
+      "PowerShell(venv\\\\Scripts\\\\pip.exe freeze 2>$null | Select-Object -First 50)",
+      "PowerShell(venv\\\\Scripts\\\\pip.exe install --force-reinstall pydantic-core 2>&1 | Select-Object -Last 20)",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -c \"import sys; print\\(sys.version\\); import sysconfig; print\\(sysconfig.get_config_var\\('EXT_SUFFIX'\\)\\)\")",
+      "PowerShell(venv\\\\Scripts\\\\pip.exe freeze > requirements.txt; Write-Host \"저장 완료\"; Get-Content requirements.txt | Measure-Object -Line)",
+      "PowerShell(venv\\\\Scripts\\\\pip.exe install --upgrade pip -q; Write-Host \"pip 업그레이드 완료\")",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -m pip install --upgrade pip -q; Write-Host \"pip 업그레이드 완료\")",
+      "PowerShell(Out-File *)",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -m pip install -r requirements_install.txt 2>&1 | Select-Object -Last 20)",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -c \"import pydantic_core; print\\('pydantic_core:', pydantic_core.__version__\\); import pydantic; print\\('pydantic:', pydantic.__version__\\); from langchain_core.messages import AIMessage; print\\('langchain_core: OK'\\); from langgraph.graph import StateGraph; print\\('langgraph: OK'\\)\")",
+      "PowerShell(venv\\\\Scripts\\\\python.exe -c \"from agent.graph import build_graph; print\\('agent.graph: OK'\\)\" 2>&1)"
     ]
   }
 }
