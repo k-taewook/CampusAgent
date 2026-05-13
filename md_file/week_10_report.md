@@ -1,6 +1,7 @@
 # CampusAgent 10주차 실습일지
 
 작성일: 2026-05-11
+최종 수정: 2026-05-13
 주차: 10주차 (전체 15주 중)
 작성자: 김태욱
 
@@ -79,7 +80,43 @@ LangGraph의 `MemorySaver`는 앱이 살아 있는 동안의 단기 세션 기�
 
 `agent/graph.py`의 `ALL_TOOLS`에 `STUDENT_INFO_TOOLS`를 추가했고, `agent/prompts.py`에 새 도구 사용 규칙을 포함하여 Agent가 질문 유형에 따라 기존 공지 검색과 대학생 정보 검색을 구분해서 호출하도록 했다.
 
-### 2.3 버전 표기 통일
+### 2.3 외부 공공 API 실시간 연동 완료 (2026-05-13 추가)
+
+10주차 구현 당시 `student_info_server.py`의 `search_scholarship_policy`(온통청년)와 `search_job_intern`(워크넷) 도구는 API 키 미발급 상태여서 안내 메시지만 반환했다. 이번에 API 키를 모두 발급받아 `.env`에 설정하고, `rag/external_crawler.py`의 엔드포인트와 파라미터를 실제 API 명세에 맞게 수정했다.
+
+**온통청년 청년정책 API**
+
+| 항목 | 수정 전 | 수정 후 |
+|---|---|---|
+| 엔드포인트 | `/opi/youthPlcyList.do` | `/go/ythip/getPlcy` |
+| 인증키 파라미터 | `openApiVlak` | `apiKeyNm` |
+| 검색 파라미터 | `query` | `plcyNm` |
+| 페이지 파라미터 | `pageIndex` / `display` | `pageNum` / `pageSize` |
+
+이전 엔드포인트는 HTTPS 요청 시 `http://www.youthcenter.go.kr:8080/`으로 302 리다이렉트되어 타임아웃이 발생하는 서버 인프라 이슈가 있었다. 새 엔드포인트로 전환 후 장학금 정책 검색 정상 응답 확인.
+
+**워크넷 공채속보 API**
+
+| 항목 | 수정 전 | 수정 후 |
+|---|---|---|
+| 엔드포인트 | `openapi.work.go.kr/opi/opia/pubRecruitmentBbs.do` | `www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L21.do` |
+| 호출 타입 | 없음 | `callTp=L` (목록) |
+| 응답 형식 | JSON (시도) | XML 전용 (`xml.etree.ElementTree` 파싱) |
+| 기본 필터 | 없음 | `empWantedCareerCd=30\|40` (신입·인턴 자동 적용) |
+
+이전 엔드포인트(`pubRecruitmentBbs.do`)는 서버에서 404를 반환했다. 새 포털(work24.go.kr)의 공채속보 API 명세를 확인하여 엔드포인트와 필수 파라미터(`callTp`, `returnType=XML`)를 수정하고, XML 응답 파싱 로직을 새로 작성했다.
+
+**날짜 포맷 변환 유틸 추가**
+
+워크넷 응답의 `empWantedEndt` 필드가 `YYYYMMDD` 형식이어서 `_fmt_date()` 헬퍼 함수를 추가하여 `YYYY-MM-DD`로 변환하도록 했다.
+
+### 2.4 K-스타트업 크롤러 필터 버그 수정 (2026-05-13 추가)
+
+`crawl_kstartup_contest()`에 클라이언트 사이드 제목 필터(`if query and query not in title`)가 있었다. K-스타트업 공고 제목은 "모집", "공고" 등의 표현을 사용하고 "공모전"이라는 단어를 직접 쓰지 않아, 사용자가 "공모전"으로 검색하면 항상 0건을 반환하는 문제가 있었다.
+
+K-스타트업은 이미 공모전·창업지원 특화 사이트이므로 제목 필터를 제거하고 전체를 반환하도록 수정했다. 수정 후 "공모전", "소프트웨어" 등 임의 쿼리로 검색해도 실제 모집 공고가 정상 반환된다.
+
+### 2.5 버전 표기 통일
 
 구현 결과를 반영하여 세 곳의 버전 표기를 `0.9.0`으로 통일했다.
 
@@ -93,19 +130,19 @@ LangGraph의 `MemorySaver`는 앱이 살아 있는 동안의 단기 세션 기�
 
 ## 3. 테스트 결과
 
-자동 테스트 42개 전체 통과, 회귀 없음.
+자동 테스트 48개 전체 통과, 회귀 없음. (2026-05-13 기준)
 
 ```
-42 passed, 1 warning in 9.39s
+48 passed, 1 warning in 11.22s
 ```
 
-| 파일 | 테스트 수 | 결과 |
-|---|---|---|
-| `tests/test_task.py` | 13 | ✅ 통과 |
-| `tests/test_calendar.py` | 12 | ✅ 통과 |
-| `tests/test_memory.py` | 7 | ✅ 통과 |
-| `tests/test_rag.py` | 8 | ✅ 통과 |
-| `tests/test_student_info.py` | 2 | ✅ 통과 |
+| 파일 | 테스트 수 | 결과 | 변경 |
+|---|---|---|---|
+| `tests/test_task.py` | 13 | ✅ 통과 | - |
+| `tests/test_calendar.py` | 12 | ✅ 통과 | - |
+| `tests/test_memory.py` | 7 | ✅ 통과 | - |
+| `tests/test_rag.py` | 8 | ✅ 통과 | - |
+| `tests/test_student_info.py` | 8 | ✅ 통과 | +6 (API 키 미설정 안내, 크롤러 모킹 등) |
 
 **`tests/test_memory.py` 검증 범위**
 
@@ -116,10 +153,16 @@ LangGraph의 `MemorySaver`는 앱이 살아 있는 동안의 단기 세션 기�
 - 대화 이력 삭제 후 세션 row 보존
 - 메시지/요약 없는 세션 삭제 시 `False` 반환
 
-**`tests/test_student_info.py` 검증 범위**
+**`tests/test_student_info.py` 검증 범위** (2026-05-13 기준 8개)
 
 - JSON 로드 후 카테고리 3개(transfer/policy/contest) 포함 여부 확인
 - ChromaDB 저장 후 편입학/국가제도/공모전 각 카테고리 검색 결과 반환 확인
+- 실시간 크롤러(`search_student_info_live`) 모킹 테스트
+- 편입학 학교별 검색(`search_transfer_by_school`) 모킹 테스트
+- 온통청년 API 키 미설정 시 안내 메시지 반환 확인
+- 워크넷 API 키 미설정 시 안내 메시지 반환 확인
+- K-스타트업 외부 공모전 검색(`search_contest_external`) 모킹 테스트
+- 학생 정보 키워드 카테고리 매핑 정의 확인
 
 **경고 1건**: Python 3.14와 chromadb의 `asyncio.iscoroutinefunction` 호환성 경고. 기능에 영향 없으며 Python 3.16 이전에 chromadb 업데이트로 해소될 예정.
 
@@ -147,6 +190,7 @@ CampusAgent/
 │   └─ student_info_samples.json # 신규
 ├─ rag/
 │   ├─ crawler.py
+│   ├─ external_crawler.py           # 신규: 온통청년/워크넷/어디가/K-스타트업 연동
 │   ├─ loader.py
 │   ├─ chunker.py
 │   ├─ embedder.py
@@ -168,7 +212,7 @@ CampusAgent/
 | 요약 메모리 자동 생성 | 테이블/함수는 완성, 트리거 미구현 → 항상 "요약 없음" 상태 | 14주차 |
 | ChromaDB 컬렉션 분리 | 공지사항과 대학생 정보가 같은 컬렉션 공유 중 | 11주차 검토 |
 | `tests/test_agent.py` | LangGraph tool routing, API 키 fallback 테스트 없음 | 11주차 |
-| 대학생 정보 실시간 크롤러 | 현재 샘플 데이터 기반 → 실시간 수집은 11~13주차에 단계적 확장 | 11~13주차 |
+| 대학생 정보 실시간 크롤러 | ~~현재 샘플 데이터 기반~~ → **2026-05-13 완료**: 온통청년·워크넷 API, K-스타트업 크롤링 실시간 연동 완료 | ✅ 완료 |
 
 ---
 
@@ -189,3 +233,5 @@ CampusAgent/
 - 전체 로드맵: `md_file/plan.md`
 - 10주차 상세 계획 및 체크리스트: `md_file/week_10_plan.md`
 - 핵심 파일 위치: `database/db.py`, `mcp_servers/student_info_server.py`, `agent/graph.py`, `agent/prompts.py`
+- 2026-05-13 수정 파일: `rag/external_crawler.py`, `.env`
+- 검증 가이드: `md_file/verification_guide.md`
