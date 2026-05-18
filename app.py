@@ -2,6 +2,7 @@
 CampusAgent — Streamlit 메인 애플리케이션
 """
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from agent.graph import build_graph
@@ -44,6 +45,173 @@ if "db_initialized" not in st.session_state:
     init_sqlite_db()
     get_or_create_conversation_session(CONVERSATION_SESSION_ID, "Streamlit 기본 세션")
     st.session_state.db_initialized = True
+
+
+def inject_responsive_layout():
+    """Viewport 기준 전체 화면 레이아웃 CSS/JS 주입"""
+    components.html(
+        """
+        <script>
+        const setAppHeight = () => {
+          const vh = window.innerHeight;
+          document.documentElement.style.setProperty('--app-height', `${vh}px`);
+        };
+        const setChatLayout = () => {
+          const doc = document.documentElement;
+          const chatInput = document.querySelector('[data-testid="stChatInput"]');
+          const chatMessages = document.querySelector('.st-key-chat_messages');
+          const mainBlock = document.querySelector('[data-testid="stMainBlockContainer"]');
+          if (!mainBlock) return;
+
+          const inputRect = chatInput?.getBoundingClientRect();
+          const messagesRect = chatMessages?.getBoundingClientRect();
+          const inputHeight = inputRect ? inputRect.height : 110;
+          const bottomGap = window.innerWidth <= 900 ? 14 : 18;
+          const mainBottomPad = inputHeight + bottomGap + 10;
+
+          doc.style.setProperty('--chat-input-safe-height', `${inputHeight + bottomGap}px`);
+          doc.style.setProperty('--main-block-bottom-pad', `${mainBottomPad}px`);
+
+          if (messagesRect) {
+            const available = Math.max(
+              260,
+              Math.floor(window.innerHeight - messagesRect.top - inputHeight - bottomGap - 12)
+            );
+            doc.style.setProperty('--chat-messages-height', `${available}px`);
+          }
+        };
+        setAppHeight();
+        const applyLayout = () => {
+          setAppHeight();
+          setChatLayout();
+        };
+        applyLayout();
+        window.addEventListener('resize', setAppHeight);
+        window.addEventListener('resize', applyLayout);
+        window.addEventListener('load', applyLayout);
+        const observer = new MutationObserver(() => {
+          window.requestAnimationFrame(applyLayout);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+    st.markdown(
+        """
+        <style>
+        :root {
+          --app-height: 100dvh;
+          --chat-input-safe-height: 7rem;
+          --chat-messages-height: 24rem;
+          --main-block-bottom-pad: 8rem;
+        }
+
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+          min-height: var(--app-height);
+        }
+
+        [data-testid="stMainBlockContainer"] {
+          max-width: none;
+          min-height: var(--app-height);
+          padding-top: 0.75rem;
+          padding-bottom: var(--main-block-bottom-pad);
+        }
+
+        section[data-testid="stSidebar"] > div:first-child {
+          min-height: var(--app-height);
+        }
+
+        .st-key-view_selector {
+          margin-bottom: 0.75rem;
+        }
+
+        .st-key-chat_page {
+          min-height: calc(var(--app-height) - 12.5rem);
+        }
+
+        .st-key-chat_messages {
+          height: var(--chat-messages-height);
+          min-height: 16rem;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 0.25rem 0.5rem 1rem 0.25rem;
+          scroll-padding-bottom: 1rem;
+          border-radius: 1rem;
+          border: 1px solid rgba(128, 128, 128, 0.14);
+          background:
+            linear-gradient(to bottom, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+            color-mix(in srgb, var(--secondary-background-color) 20%, transparent);
+          box-shadow: inset 0 -1px 0 rgba(255,255,255,0.04);
+        }
+
+        [data-testid="stChatInput"] {
+          position: fixed;
+          left: calc(21rem + 2rem);
+          right: 2rem;
+          bottom: 1rem;
+          z-index: 50;
+          background: color-mix(in srgb, var(--background-color) 86%, transparent);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          padding: 0.75rem 0 0.35rem 0;
+          border-top: 1px solid rgba(128, 128, 128, 0.12);
+          box-shadow: 0 -18px 32px rgba(0,0,0,0.12);
+        }
+
+        [data-testid="stChatInput"] > div {
+          max-width: none;
+        }
+
+        [data-testid="stChatInput"]::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: -18px;
+          height: 18px;
+          background: linear-gradient(to top, rgba(0,0,0,0.08), transparent);
+          pointer-events: none;
+        }
+
+        .st-key-chat_page::after {
+          content: "";
+          display: block;
+          height: 0.5rem;
+        }
+
+        .main-title-block h1 {
+          margin-bottom: 0.1rem;
+          line-height: 1.05;
+        }
+
+        .main-title-block p {
+          margin-bottom: 0;
+        }
+
+        @media (max-width: 900px) {
+          [data-testid="stMainBlockContainer"] {
+            padding-top: 0.5rem;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+            padding-bottom: var(--main-block-bottom-pad);
+          }
+
+          [data-testid="stChatInput"] {
+            left: 0.75rem;
+            right: 0.75rem;
+            bottom: 0.65rem;
+            padding-top: 0.6rem;
+          }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+inject_responsive_layout()
 
 # ──────────────────────────────────────
 # 사이드바: 시스템 정보 + 대시보드
@@ -124,8 +292,10 @@ with st.sidebar:
 # ──────────────────────────────────────
 # 메인 영역 (Tabs)
 # ──────────────────────────────────────
+st.markdown('<div class="main-title-block">', unsafe_allow_html=True)
 st.title("🎓 CampusAgent")
-st.subheader("대학생 특화 로컬 AI 어시스턴트")
+st.caption("대학생 특화 로컬 AI 어시스턴트")
+st.markdown('</div>', unsafe_allow_html=True)
 
 # 세션 상태 초기화
 if "messages" not in st.session_state:
@@ -143,33 +313,26 @@ if "graph" not in st.session_state:
     init_chromadb()
     st.session_state.graph = build_graph()
 
-tab_chat, tab_dashboard, tab_calendar, tab_settings = st.tabs(["💬 챗봇", "📊 과제 대시보드", "📅 캘린더", "⚙️ 설정"])
+selected_view = st.segmented_control(
+    "화면 선택",
+    options=["💬 챗봇", "📊 과제 대시보드", "📅 캘린더", "⚙️ 설정"],
+    default="💬 챗봇",
+    selection_mode="single",
+    key="view_selector",
+    label_visibility="collapsed",
+)
 
-with tab_chat:
-    # 대화 내용만 위에서 아래로 스크롤 가능하도록 컨테이너 지정
-    chat_container = st.container(height=600, border=False)
-    
-    with chat_container:
-        # 이전 메시지 출력
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+if selected_view == "💬 챗봇":
+    with st.container(key="chat_page", border=False):
+        chat_container = st.container(border=False, key="chat_messages")
 
-    # ── ⚡ 원클릭 빠른 시작 버튼 ──
-    st.markdown("💡 **추천 명령어**")
-    btn_cols = st.columns(4)
-    if btn_cols[0].button("📅 오늘 일정 보여줘"):
-        st.session_state.quick_prompt = "오늘 일정 보여줘"
-    if btn_cols[1].button("⏰ 마감 임박 과제"):
-        st.session_state.quick_prompt = "이번 주 마감인 과제 알려줘"
-    if btn_cols[2].button("🔍 장학금 공지 검색"):
-        st.session_state.quick_prompt = "장학금 공지사항 찾아줘"
-    if btn_cols[3].button("🗑️ 저장 공지 삭제"):
-        st.session_state.quick_prompt = "저장된 공지사항 삭제해줘"
+        with chat_container:
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
 
-    # 사용자 입력
-    user_input = st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓")
-    
+        user_input = st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓")
+
     prompt = user_input
     if "quick_prompt" in st.session_state:
         prompt = st.session_state.quick_prompt
@@ -278,7 +441,7 @@ with tab_chat:
                         except Exception:
                             pass
 
-with tab_dashboard:
+elif selected_view == "📊 과제 대시보드":
     st.markdown("### 📊 과제 대시보드")
     
     urgent_only = st.toggle("🔥 긴급(High) 과제만 보기", value=False)
@@ -360,7 +523,7 @@ with tab_dashboard:
     except Exception as e:
         st.error(f"대시보드 로딩 실패: {e}")
 
-with tab_calendar:
+elif selected_view == "📅 캘린더":
     import calendar as _cal
     from datetime import date as _date
 
@@ -570,7 +733,7 @@ with tab_calendar:
             unsafe_allow_html=True,
         )
 
-with tab_settings:
+elif selected_view == "⚙️ 설정":
     st.markdown("### ⚙️ 사용자 설정")
     st.caption("AI 어시스턴트가 답변할 때 참고할 개인화 정보를 설정하세요.")
     
