@@ -11,9 +11,7 @@ from datetime import datetime, timedelta
 from config.settings import SQLITE_DB_PATH
 from database.models import (
     Assignment, AssignmentCreate, AssignmentStatus,
-    AssignmentWithProgress,
     Schedule, ScheduleCreate,
-    Subtask, SubtaskCreate,
 )
 
 
@@ -81,20 +79,6 @@ def init_sqlite_db():
         content TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now', 'localtime')),
         FOREIGN KEY (session_id) REFERENCES conversation_sessions(id)
-    );
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS assignment_subtasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        assignment_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        due_date TEXT,
-        status TEXT DEFAULT 'pending',
-        sort_order INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
-        FOREIGN KEY (assignment_id) REFERENCES assignments(id)
     );
     """)
 
@@ -307,50 +291,6 @@ def add_assignment(data: AssignmentCreate) -> Assignment:
     return _row_to_assignment(row)
 
 
-def add_subtask(data: SubtaskCreate) -> Subtask:
-    """서브태스크 1개 추가"""
-    if get_assignment_by_id(data.assignment_id) is None:
-        raise ValueError(f"부모 과제를 찾을 수 없습니다: {data.assignment_id}")
-
-    conn = _get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO assignment_subtasks (assignment_id, title, description, due_date, status, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            data.assignment_id,
-            data.title,
-            data.description,
-            data.due_date,
-            data.status,
-            data.sort_order,
-        ),
-    )
-    conn.commit()
-    new_id = cursor.lastrowid
-    row = cursor.execute(
-        "SELECT * FROM assignment_subtasks WHERE id = ?",
-        (new_id,),
-    ).fetchone()
-    conn.close()
-    return _row_to_subtask(row)
-
-
-def add_subtasks(assignment_id: int, subtasks: list[SubtaskCreate]) -> list[Subtask]:
-    """서브태스크 여러 개 추가"""
-    created = []
-    for index, subtask in enumerate(subtasks):
-        payload = subtask.model_copy(update={
-            "assignment_id": assignment_id,
-            "sort_order": subtask.sort_order if subtask.sort_order is not None else index,
-        })
-        created.append(add_subtask(payload))
-    sync_assignment_status_from_subtasks(assignment_id)
-    return created
-
-
 def get_assignments(
     status: Optional[str] = None,
     course_name: Optional[str] = None,
@@ -373,21 +313,6 @@ def get_assignments(
     return [_row_to_assignment(r) for r in rows]
 
 
-def get_subtasks(assignment_id: int) -> List[Subtask]:
-    """특정 과제의 서브태스크 목록 조회"""
-    conn = _get_connection()
-    rows = conn.execute(
-        """
-        SELECT * FROM assignment_subtasks
-        WHERE assignment_id = ?
-        ORDER BY sort_order ASC, id ASC
-        """,
-        (assignment_id,),
-    ).fetchall()
-    conn.close()
-    return [_row_to_subtask(row) for row in rows]
-
-
 def get_assignment_by_id(assignment_id: int) -> Optional[Assignment]:
     """ID로 과제 조회"""
     conn = _get_connection()
@@ -396,35 +321,6 @@ def get_assignment_by_id(assignment_id: int) -> Optional[Assignment]:
     if row is None:
         return None
     return _row_to_assignment(row)
-
-
-def get_assignment_progress(assignment_id: int) -> dict:
-    """서브태스크 기반 진행률 계산"""
-    assignment = get_assignment_by_id(assignment_id)
-    if assignment is None:
-        raise ValueError(f"과제를 찾을 수 없습니다: {assignment_id}")
-
-    subtasks = get_subtasks(assignment_id)
-    total = len(subtasks)
-    completed = sum(1 for subtask in subtasks if subtask.status == AssignmentStatus.DONE)
-    progress = 0 if total == 0 else int(round((completed / total) * 100))
-    derived_status = assignment.status.value
-
-    if total > 0:
-        if completed == 0:
-            derived_status = AssignmentStatus.PENDING.value
-        elif completed == total:
-            derived_status = AssignmentStatus.DONE.value
-        else:
-            derived_status = AssignmentStatus.IN_PROGRESS.value
-
-    return {
-        "assignment_id": assignment_id,
-        "total_subtasks": total,
-        "completed_subtasks": completed,
-        "progress_percent": progress,
-        "status": derived_status,
-    }
 
 
 def update_assignment_status(assignment_id: int, new_status: str) -> Optional[Assignment]:
@@ -446,100 +342,14 @@ def update_assignment_status(assignment_id: int, new_status: str) -> Optional[As
     return _row_to_assignment(row)
 
 
-def update_subtask_status(subtask_id: int, new_status: str) -> Optional[Subtask]:
-    """서브태스크 상태 변경"""
-    valid = {s.value for s in AssignmentStatus}
-    if new_status not in valid:
-        raise ValueError(f"유효하지 않은 상태입니다: {new_status}. 가능한 값: {valid}")
-
-    conn = _get_connection()
-    conn.execute(
-        "UPDATE assignment_subtasks SET status = ? WHERE id = ?",
-        (new_status, subtask_id),
-    )
-    conn.commit()
-    row = conn.execute(
-        "SELECT * FROM assignment_subtasks WHERE id = ?",
-        (subtask_id,),
-    ).fetchone()
-    conn.close()
-    if row is None:
-        return None
-
-    subtask = _row_to_subtask(row)
-    sync_assignment_status_from_subtasks(subtask.assignment_id)
-    return subtask
-
-
-def sync_assignment_status_from_subtasks(assignment_id: int) -> Optional[Assignment]:
-    """서브태스크 진행률에 맞춰 부모 과제 상태 동기화"""
-    assignment = get_assignment_by_id(assignment_id)
-    if assignment is None:
-        return None
-
-    progress = get_assignment_progress(assignment_id)
-    if progress["total_subtasks"] == 0:
-        return assignment
-
-    return update_assignment_status(assignment_id, progress["status"])
-
-
 def delete_assignment(assignment_id: int) -> bool:
     """과제 삭제 (성공 여부 반환)"""
     conn = _get_connection()
-    conn.execute(
-        "DELETE FROM assignment_subtasks WHERE assignment_id = ?",
-        (assignment_id,),
-    )
     cursor = conn.execute("DELETE FROM assignments WHERE id = ?", (assignment_id,))
     conn.commit()
     deleted = cursor.rowcount > 0
     conn.close()
     return deleted
-
-
-def delete_subtask(subtask_id: int) -> bool:
-    """서브태스크 삭제"""
-    conn = _get_connection()
-    row = conn.execute(
-        "SELECT assignment_id FROM assignment_subtasks WHERE id = ?",
-        (subtask_id,),
-    ).fetchone()
-    cursor = conn.execute(
-        "DELETE FROM assignment_subtasks WHERE id = ?",
-        (subtask_id,),
-    )
-    conn.commit()
-    conn.close()
-
-    deleted = cursor.rowcount > 0
-    if deleted and row:
-        sync_assignment_status_from_subtasks(int(row["assignment_id"]))
-    return deleted
-
-
-def get_assignments_with_progress(
-    status: Optional[str] = None,
-    course_name: Optional[str] = None,
-) -> List[AssignmentWithProgress]:
-    """서브태스크와 진행률을 포함한 과제 목록 조회"""
-    assignments = get_assignments(status=status, course_name=course_name)
-    results: list[AssignmentWithProgress] = []
-
-    for assignment in assignments:
-        subtasks = get_subtasks(assignment.id)
-        progress = get_assignment_progress(assignment.id)
-        results.append(
-            AssignmentWithProgress(
-                assignment=assignment,
-                subtasks=subtasks,
-                total_subtasks=progress["total_subtasks"],
-                completed_subtasks=progress["completed_subtasks"],
-                progress_percent=progress["progress_percent"],
-            )
-        )
-
-    return results
 
 
 def get_upcoming_assignments(days: int = 7) -> List[Assignment]:
@@ -576,20 +386,6 @@ def _row_to_assignment(row: sqlite3.Row) -> Assignment:
         due_date=row["due_date"],
         status=row["status"],
         priority=row["priority"] if row["priority"] else "medium",
-        created_at=row["created_at"],
-    )
-
-
-def _row_to_subtask(row: sqlite3.Row) -> Subtask:
-    """sqlite3.Row -> Subtask 변환"""
-    return Subtask(
-        id=row["id"],
-        assignment_id=row["assignment_id"],
-        title=row["title"],
-        description=row["description"],
-        due_date=row["due_date"],
-        status=row["status"],
-        sort_order=row["sort_order"] if row["sort_order"] is not None else 0,
         created_at=row["created_at"],
     )
 

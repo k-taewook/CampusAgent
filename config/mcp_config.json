@@ -5,12 +5,8 @@
       "module": "mcp_servers.task_server",
       "tools": [
         "add_task",
-        "add_task_with_subtasks",
         "list_tasks",
-        "list_task_tree",
         "update_task_status",
-        "update_subtask_status_tool",
-        "get_task_progress",
         "delete_task",
         "get_upcoming_deadlines"
       ],
