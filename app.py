@@ -8,6 +8,7 @@ from agent.graph import build_graph
 from database.db import (
     init_sqlite_db,
     get_assignments,
+    get_assignments_with_progress,
     get_upcoming_assignments,
     get_today_schedules,
     get_dday_schedules,
@@ -15,13 +16,13 @@ from database.db import (
     get_user_setting,
     set_user_setting,
     update_assignment_status,
+    update_subtask_status,
     get_or_create_conversation_session,
     load_recent_conversation_messages,
     save_conversation_message,
     get_latest_memory_summary,
 )
 from rag.retriever import init_chromadb, get_notice_count
-import pandas as pd
 from collections import defaultdict
 from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION, is_llm_available, get_llm_provider, get_llm_model
 
@@ -283,52 +284,79 @@ with tab_dashboard:
     urgent_only = st.toggle("🔥 긴급(High) 과제만 보기", value=False)
     
     try:
-        all_tasks = get_assignments()
+        all_tasks = get_assignments_with_progress()
         if urgent_only:
-            all_tasks = [t for t in all_tasks if t.priority == 'high']
+            all_tasks = [item for item in all_tasks if item.assignment.priority == "high"]
             
         if not all_tasks:
             st.info("📚 등록된 과제가 없습니다. 챗봇에게 과제를 추가해달라고 말해보세요!")
         else:
-            df_data = []
-            for t in all_tasks:
-                df_data.append({
-                    "ID": t.id,
-                    "완료": t.status == "done",
-                    "상태": t.status,
-                    "제목": t.title,
-                    "과목": t.course_name,
-                    "마감일": t.due_date,
-                    "우선순위": t.priority,
-                })
-            df = pd.DataFrame(df_data)
-            
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "ID": None, # Hide ID
-                    "완료": st.column_config.CheckboxColumn("완료", help="체크 시 즉시 완료 처리됩니다."),
-                    "상태": st.column_config.TextColumn("상태", disabled=True),
-                    "제목": st.column_config.TextColumn("과제 제목", disabled=True),
-                    "과목": st.column_config.TextColumn("과목명", disabled=True),
-                    "마감일": st.column_config.TextColumn("마감일", disabled=True),
-                    "우선순위": st.column_config.TextColumn("우선순위", disabled=True),
-                },
-                disabled=["상태", "제목", "과목", "마감일", "우선순위"],
-                hide_index=True,
-                key="task_editor"
-            )
-            
-            # 변경점 감지하여 DB 업데이트
-            for i, row in edited_df.iterrows():
-                was_done = df.iloc[i]["완료"]
-                is_done = row["완료"]
-                if was_done != is_done:
-                    tid = row["ID"]
-                    new_status = "done" if is_done else "pending"
-                    update_assignment_status(int(tid), new_status)
-                    st.success(f"과제 '{row['제목']}' 상태가 변경되었습니다!")
-                    st.rerun()
+            total_count = len(all_tasks)
+            subtasked_count = sum(1 for item in all_tasks if item.subtasks)
+            done_count = sum(1 for item in all_tasks if item.assignment.status.value == "done")
+            metric_cols = st.columns(3)
+            metric_cols[0].metric("전체 과제", total_count)
+            metric_cols[1].metric("서브태스크 포함", subtasked_count)
+            metric_cols[2].metric("완료 과제", done_count)
+
+            st.markdown("---")
+
+            for item in all_tasks:
+                assignment = item.assignment
+                progress_label = (
+                    f"{item.progress_percent}% ({item.completed_subtasks}/{item.total_subtasks})"
+                    if item.subtasks
+                    else assignment.status.value
+                )
+                expander_title = (
+                    f"[{assignment.id}] {assignment.title} | "
+                    f"{assignment.course_name} | "
+                    f"{progress_label}"
+                )
+
+                with st.expander(expander_title, expanded=bool(item.subtasks)):
+                    meta_cols = st.columns(4)
+                    meta_cols[0].markdown(f"**과목**  \n{assignment.course_name}")
+                    meta_cols[1].markdown(f"**마감일**  \n{assignment.due_date}")
+                    meta_cols[2].markdown(f"**우선순위**  \n{assignment.priority}")
+                    meta_cols[3].markdown(f"**상태**  \n{assignment.status.value}")
+
+                    if assignment.description:
+                        st.caption(assignment.description)
+
+                    if item.subtasks:
+                        st.progress(item.progress_percent / 100 if item.progress_percent else 0.0)
+                        st.caption(
+                            f"진행률 {item.progress_percent}% | 완료 {item.completed_subtasks} / 전체 {item.total_subtasks}"
+                        )
+                        st.markdown("#### 서브태스크")
+                        for subtask in item.subtasks:
+                            checkbox_key = f"subtask_done_{subtask.id}"
+                            is_done = st.checkbox(
+                                f"{subtask.title} · {subtask.due_date or '마감일 미정'}",
+                                value=subtask.status.value == "done",
+                                key=checkbox_key,
+                            )
+                            if is_done != (subtask.status.value == "done"):
+                                update_subtask_status(
+                                    subtask.id,
+                                    "done" if is_done else "pending",
+                                )
+                                st.rerun()
+                            st.caption(f"현재 상태: {subtask.status.value}")
+                    else:
+                        parent_done_key = f"assignment_done_{assignment.id}"
+                        is_done = st.checkbox(
+                            "이 과제를 완료로 표시",
+                            value=assignment.status.value == "done",
+                            key=parent_done_key,
+                        )
+                        if is_done != (assignment.status.value == "done"):
+                            update_assignment_status(
+                                assignment.id,
+                                "done" if is_done else "pending",
+                            )
+                            st.rerun()
     except Exception as e:
         st.error(f"대시보드 로딩 실패: {e}")
 
