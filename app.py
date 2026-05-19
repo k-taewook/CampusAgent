@@ -1,4 +1,4 @@
-"""
+﻿"""
 CampusAgent — Streamlit 메인 애플리케이션
 """
 import streamlit as st
@@ -145,6 +145,43 @@ if "graph" not in st.session_state:
 tab_chat, tab_dashboard, tab_calendar, tab_settings = st.tabs(["💬 챗봇", "📊 과제 대시보드", "📅 캘린더", "⚙️ 설정"])
 
 with tab_chat:
+    st.markdown(
+        """
+        <style>
+        div.block-container {
+            padding-top: 1.25rem;
+            padding-bottom: 0;
+        }
+        div[data-testid="stChatInput"] {
+            position: fixed;
+            left: 23rem;
+            right: 3rem;
+            bottom: 0;
+            z-index: 1000;
+            padding: 0.75rem 0 1rem 0;
+            background: var(--background-color);
+            border-top: 1px solid rgba(128, 128, 128, 0.2);
+        }
+        div[data-testid="stChatInput"] > div {
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+        }
+        .campus-chat-bottom-spacer {
+            height: 5rem;
+        }
+        @media (max-width: 900px) {
+            div[data-testid="stChatInput"] {
+                left: 1rem;
+                right: 1rem;
+            }
+
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # 대화 내용만 위에서 아래로 스크롤 가능하도록 컨테이너 지정
     chat_container = st.container(height=600, border=False)
     
@@ -154,20 +191,9 @@ with tab_chat:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-    # ── ⚡ 원클릭 빠른 시작 버튼 ──
-    st.markdown("💡 **추천 명령어**")
-    btn_cols = st.columns(4)
-    if btn_cols[0].button("📅 오늘 일정 보여줘"):
-        st.session_state.quick_prompt = "오늘 일정 보여줘"
-    if btn_cols[1].button("⏰ 마감 임박 과제"):
-        st.session_state.quick_prompt = "이번 주 마감인 과제 알려줘"
-    if btn_cols[2].button("🔍 장학금 공지 검색"):
-        st.session_state.quick_prompt = "장학금 공지사항 찾아줘"
-    if btn_cols[3].button("🗑️ 저장 공지 삭제"):
-        st.session_state.quick_prompt = "저장된 공지사항 삭제해줘"
-
     # 사용자 입력
     user_input = st.chat_input("과제, 일정, 공지사항 등에 대해 편하게 물어보세요! 🎓")
+    st.markdown('<div class="campus-chat-bottom-spacer"></div>', unsafe_allow_html=True)
     
     prompt = user_input
     if "quick_prompt" in st.session_state:
