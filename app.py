@@ -48,7 +48,9 @@ st.markdown(
     """
     <style>
     header[data-testid="stHeader"],
-    div[data-testid="stToolbar"],
+    div[data-testid="stToolbar"] {
+        display: none !important;
+    }
     div[data-testid="stDecoration"],
     #MainMenu {
         display: none !important;
@@ -147,7 +149,7 @@ with st.sidebar:
 # ──────────────────────────────────────
 # 메인 영역 (Tabs)
 # ──────────────────────────────────────
-st.subheader("대학생 특화 로컬 AI 어시스턴트")
+st.markdown("### 🎓 CampusAgent")
 
 # 세션 상태 초기화
 if "messages" not in st.session_state:
