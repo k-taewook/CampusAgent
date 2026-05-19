@@ -44,6 +44,30 @@ if "db_initialized" not in st.session_state:
     get_or_create_conversation_session(CONVERSATION_SESSION_ID, "Streamlit 기본 세션")
     st.session_state.db_initialized = True
 
+st.markdown(
+    """
+    <style>
+    header[data-testid="stHeader"],
+    div[data-testid="stToolbar"],
+    div[data-testid="stDecoration"],
+    #MainMenu {
+        display: none !important;
+    }
+    div.block-container {
+        padding-top: 1.25rem !important;
+    }
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 0.75rem !important;
+    }
+    section[data-testid="stSidebar"] h2 {
+        margin-top: -5rem !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ──────────────────────────────────────
 # 사이드바: 시스템 정보 + 대시보드
 # ──────────────────────────────────────
@@ -123,7 +147,6 @@ with st.sidebar:
 # ──────────────────────────────────────
 # 메인 영역 (Tabs)
 # ──────────────────────────────────────
-st.title("🎓 CampusAgent")
 st.subheader("대학생 특화 로컬 AI 어시스턴트")
 
 # 세션 상태 초기화
