@@ -1,40 +1,54 @@
 # CampusAgent 폴더 정밀 분석 보고서
 
-분석 기준일: 2026-05-09  
-분석 위치: `C:\workspace\CampusAgent`
+분석 기준일: 2026-05-19.  
+분석 위치: `C:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent`.  
+검증 기준: 전체 소스, 테스트, 문서, TestSprite 산출물, 현재 로컬 테스트 실행 결과.
 
-## 1. 전체 요약
+## 1. research.md 평가 요약
 
-이 폴더는 대학생 특화 로컬 AI 어시스턴트인 **CampusAgent** 프로젝트이다. 사용자는 Streamlit 채팅 UI에서 자연어로 과제, 일정, 공지사항 검색을 요청하고, 내부에서는 LangGraph 에이전트가 LangChain `@tool`로 노출된 과제/캘린더/RAG 도구를 호출한다. 데이터 저장은 과제와 일정에는 SQLite, 공지사항 검색에는 ChromaDB 벡터 저장소를 사용한다.
+기존 `research.md`는 프로젝트의 큰 구조를 잘 설명했지만, 현재 코드보다 오래된 상태를 기준으로 작성되어 있었다. 특히 작업 경로, 버전, 테스트 결과, 장기기억 구현 상태, 대학생 정보 검색 도구 수, `mcp_config.json` 불일치 항목이 현재 저장소와 맞지 않았다.
 
-현재 코드 기준 핵심 기능은 다음 네 묶음으로 정리된다.
+이번 수정에서는 다음을 바로잡았다.
 
-- Streamlit 기반 사용자 인터페이스: 채팅, 과제 대시보드, 캘린더, 사용자 설정 탭
-- LangGraph 기반 에이전트: Gemini/OpenAI 자동 감지, ToolNode 순환 호출, MemorySaver 세션 메모리
-- 로컬 데이터 관리: SQLite 과제/일정/사용자 설정 CRUD
-- 공지사항 RAG: JSON 로더, 텍스트 청킹, ChromaDB 임베딩 저장, 실시간 학과/학교 공지 크롤링
+- 분석 위치를 현재 실제 경로로 갱신했다.
+- 버전 정보를 `0.9.0` 기준으로 통일했다.
+- `conversation_sessions`, `conversation_messages`, `memory_summaries` 기반 장기기억 구현 상태를 반영했다.
+- 대학생 정보 검색이 샘플 검색 3종을 넘어 실시간 학교 공지, 어디가, 온통청년, 워크넷, K-스타트업까지 확장된 상태를 반영했다.
+- `mcp_config.json`의 RAG 도구 누락 문제는 해결된 것으로 정정하고, 현재 남은 student-info 도구 목록 불일치를 새 이슈로 기록했다.
+- 현재 환경에서 `python -m pytest tests -q`가 `48 passed, 1 warning`으로 통과한 사실을 반영했다.
+- TestSprite 산출물이 현재 Streamlit + LangChain Tool 구조와 맞지 않는다는 점을 최신 기준으로 다시 정리했다.
 
-주의할 점도 있다. `README.md`는 v0.8.0 기능이라고 설명하지만, `config/settings.py`의 `APP_VERSION`은 `0.7.0`으로 되어 있고, `agent/prompts.py`의 시스템 프롬프트는 v0.8.0이라고 적혀 있다. 즉 문서, 앱 표시 버전, 프롬프트 버전 사이에 불일치가 있다.
+결론적으로 현재 `research.md`는 “8주차 중간 상태 보고서”에서 “0.9.0 기준 프로젝트 현황 및 다음 개선 우선순위 보고서”로 갱신되었다.
 
-또한 현재 워크스페이스에서 `python`, `py`, `venv\Scripts\python.exe`, `.venv\Scripts\python.exe`가 모두 정상 실행되지 않았다. 따라서 현재 환경에서는 앱 실행과 테스트 재검증이 막혀 있으며, 기존 `test_output.txt`에 남아 있는 테스트 결과와 코드 읽기를 기준으로 상태를 판단해야 한다.
+## 2. 전체 요약
 
-## 2. 폴더 구조와 파일 분류
+CampusAgent는 대학생을 위한 로컬 AI 어시스턴트다. 사용자는 Streamlit 채팅 UI에서 자연어로 과제, 일정, 공지사항, 대학생 생활 정보를 요청하고, 내부에서는 LangGraph 에이전트가 LangChain `@tool`로 노출된 도구들을 호출한다.
 
-의미 있는 프로젝트 파일은 다음과 같이 구성되어 있다. `venv`, `.venv`, `__pycache__`, `chroma_db_storage`는 대량의 생성/저장 파일이므로 코드 분석에서는 별도 산출물로 분류했다.
+핵심 기능은 다섯 묶음으로 정리된다.
+
+| 묶음 | 현재 상태 |
+|---|---|
+| Streamlit UI | 챗봇, 과제 대시보드, 캘린더, 설정 탭 구현. |
+| LangGraph Agent | Gemini/OpenAI 자동 감지, 전체 도구 바인딩, ToolNode 순환 호출, MemorySaver 사용. |
+| SQLite 저장소 | 과제, 일정, 사용자 설정, 대화 세션, 메시지, 요약 메모리 테이블 구현. |
+| 공지사항 RAG | 학과 공지와 학교 대표 공지 크롤링, ChromaDB 저장, 유사도 검색 구현. |
+| 대학생 정보 검색 | 샘플 데이터 검색, 학교 공지 실시간 검색, 외부 공공기관 검색 도구 구현. |
+
+현재 프로젝트는 기능 구현 기준으로 v0.9.0 상태다. 다만 11주차 계획인 과제 자동 분해와 서브태스크 트리는 아직 코드에 반영되지 않았다.
+
+## 3. 폴더 구조와 파일 분류
+
+현재 의미 있는 프로젝트 구조는 다음과 같다.
 
 ```text
 CampusAgent/
 ├─ app.py
-├─ pyproject.toml
+├─ AGENTS.md
 ├─ README.md
-├─ research.md
+├─ pyproject.toml
 ├─ .env
-├─ .gitattributes
-├─ gemini_models.txt
 ├─ campus_tasks.db
-├─ test.py
-├─ test_output.txt
-├─ tmp_streamlit.log
+├─ chroma_db_storage/
 ├─ agent/
 ├─ config/
 ├─ database/
@@ -42,60 +56,59 @@ CampusAgent/
 ├─ rag/
 ├─ data/
 ├─ tests/
+├─ md_file/
 ├─ testsprite_tests/
-├─ chroma_db_storage/
-├─ venv/
-├─ .venv/
 ├─ .github/
-└─ .claude/
+├─ .claude/
+├─ venv/
+├─ __pycache__/
+└─ kstartup_tmp.html
 ```
 
-주요 소스 라인 수는 다음과 같다.
+분석상 주의할 분류는 다음과 같다.
 
-| 영역 | 파일 | 라인 수 | 역할 |
-|---|---:|---:|---|
-| UI | `app.py` | 약 20KB | Streamlit 메인 앱 |
-| Agent | `agent/graph.py` | 130 | LangGraph 에이전트 구성 |
-| Agent | `agent/prompts.py` | 75 | 시스템 프롬프트 |
-| Agent | `agent/state.py` | 10 | AgentState 정의 |
-| DB | `database/db.py` | 286 | SQLite CRUD |
-| DB | `database/models.py` | 129 | Pydantic 모델/검증 |
-| Tools | `mcp_servers/task_server.py` | 134 | 과제 도구 5개 |
-| Tools | `mcp_servers/calendar_server.py` | 156 | 캘린더 도구 6개 |
-| Tools | `mcp_servers/rag_server.py` | 283 | RAG/크롤링 도구 5개 |
-| RAG | `rag/crawler.py` | 610 | 학과/학교 공지 크롤러 |
-| RAG | `rag/loader.py` | 80 | JSON/텍스트 로더 |
-| RAG | `rag/chunker.py` | 62 | 텍스트 청커 |
-| RAG | `rag/embedder.py` | 65 | ChromaDB 저장 |
-| RAG | `rag/retriever.py` | 74 | ChromaDB 검색 |
-| Config | `config/settings.py` | 59 | 환경변수/앱 설정 |
-| Tests | `tests/test_task.py` | 139 | 과제 DB 테스트 |
-| Tests | `tests/test_calendar.py` | 125 | 캘린더 DB 테스트 |
-| Tests | `tests/test_rag.py` | 120 | RAG 파이프라인 테스트 |
-| Tests | `tests/test_agent.py` | 0 | 비어 있음 |
+| 분류 | 경로 | 판단 |
+|---|---|---|
+| 핵심 소스 | `app.py`, `agent/`, `database/`, `mcp_servers/`, `rag/`, `config/` | 실제 애플리케이션 코드. |
+| 테스트 | `tests/` | 현재 48개 테스트 통과. |
+| 프로젝트 문서 | `README.md`, `AGENTS.md`, `md_file/` | 계획, 보고서, 검증 가이드. |
+| 샘플/수집 데이터 | `data/` | RAG와 student-info 테스트 및 시연용. |
+| 런타임 상태 | `campus_tasks.db`, `chroma_db_storage/`, `.env` | 삭제·초기화 금지 대상. |
+| 생성/임시 파일 | `__pycache__/`, `.pytest_cache/`, `venv/`, `testsprite_tests/tmp/`, `kstartup_tmp.html` | 기본적으로 분석 보조 또는 무시 대상. |
+| TestSprite 산출물 | `testsprite_tests/` | 현재 코드 인터페이스와 일부 불일치. |
 
-## 3. 실행 흐름
+주요 Python 파일 라인 수는 다음과 같다.
 
-전체 실행 흐름은 다음과 같다.
+| 영역 | 파일 | 라인 수 |
+|---|---:|---:|
+| UI | `app.py` | 529 |
+| Agent | `agent/graph.py` | 133 |
+| Agent | `agent/prompts.py` | 98 |
+| DB | `database/db.py` | 443 |
+| DB Model | `database/models.py` | 129 |
+| Tools | `mcp_servers/task_server.py` | 134 |
+| Tools | `mcp_servers/calendar_server.py` | 156 |
+| Tools | `mcp_servers/rag_server.py` | 283 |
+| Tools | `mcp_servers/student_info_server.py` | 581 |
+| RAG | `rag/crawler.py` | 610 |
+| RAG | `rag/external_crawler.py` | 288 |
+| Tests | `tests/test_student_info.py` | 172 |
+| Tests | `tests/test_task.py` | 139 |
 
-```mermaid
-flowchart TD
-    A["사용자: Streamlit 채팅 입력"] --> B["app.py"]
-    B --> C["LangGraph build_graph()"]
-    C --> D["LLM: Gemini 또는 OpenAI"]
-    D --> E{"tool_calls 있음?"}
-    E -- "있음" --> F["ToolNode"]
-    F --> G["Task / Calendar / RAG Tools"]
-    G --> H["SQLite / ChromaDB / 웹 크롤링"]
-    H --> C
-    E -- "없음" --> I["최종 응답 표시"]
-```
+가장 큰 파일은 `rag/crawler.py`, `mcp_servers/student_info_server.py`, `app.py`, `database/db.py`다. 기능 확장이 계속되면 이 네 파일은 분리 후보가 된다.
 
-`app.py`는 앱 시작 시 `init_sqlite_db()`, `init_chromadb()`, `build_graph()`를 호출한다. 이후 사용자가 메시지를 입력하면 현재 시간, 전공, 학년 정보를 `current_context`에 넣어 LangGraph에 전달한다. LangGraph는 `MemorySaver` 체크포인터를 사용하며 `thread_id`는 `"streamlit_session"`으로 고정되어 있다.
+## 4. 버전과 의존성 상태
 
-## 4. 의존성과 프로젝트 설정
+버전 표기는 현재 주요 위치에서 일치한다.
 
-`pyproject.toml` 기준 프로젝트명은 `campus-agent`, 버전은 `0.6.0`이다. 주요 의존성은 다음과 같다.
+| 위치 | 버전 |
+|---|---|
+| `pyproject.toml` | `0.9.0` |
+| `config/settings.py` | `APP_VERSION = "0.9.0"` |
+| `agent/prompts.py` | `CampusAgent v0.9.0` |
+| `README.md` | 구현 기능 `v0.9.0` |
+
+`pyproject.toml`의 런타임 의존성은 다음을 포함한다.
 
 - `langchain-core`
 - `langchain-openai`
@@ -108,160 +121,148 @@ flowchart TD
 - `requests`
 - `beautifulsoup4`
 
-버전 표기가 세 곳에서 다르다.
+주의할 점은 `pytest`가 프로젝트 의존성에 포함되어 있지 않다는 것이다. README에는 `pip install pytest`를 별도로 안내하고 있으므로 현재 구조상 테스트 도구는 개발자가 따로 설치해야 한다.
 
-| 위치 | 버전 |
+## 5. 실행 흐름
+
+전체 흐름은 다음과 같다.
+
+```mermaid
+flowchart TD
+    A["사용자 입력"] --> B["app.py Streamlit"]
+    B --> C["LangGraph build_graph"]
+    C --> D["Gemini 또는 OpenAI Chat Model"]
+    D --> E{"tool_calls 있음?"}
+    E -- "있음" --> F["ToolNode"]
+    F --> G["Task / Calendar / RAG / Student Info Tools"]
+    G --> H["SQLite / ChromaDB / 외부 웹·API"]
+    H --> C
+    E -- "없음" --> I["최종 응답"]
+    B --> J["conversation_messages 저장"]
+```
+
+`app.py`는 앱 시작 시 `init_sqlite_db()`, `get_or_create_conversation_session()`, `init_chromadb()`, `build_graph()`를 호출한다. 사용자 입력 시 현재 시간, 전공, 학년, 최신 메모리 요약을 `current_context`로 LangGraph에 전달한다.
+
+LangGraph의 `thread_id`는 현재 `"streamlit_session"`으로 고정되어 있다. 단일 사용자 로컬 앱에는 단순하고 충분하지만, 여러 사용자 또는 여러 대화방을 지원하려면 세션 분리가 필요하다.
+
+## 6. Streamlit UI 분석
+
+`app.py`는 다음 UI를 제공한다.
+
+| 영역 | 구현 내용 |
 |---|---|
-| `pyproject.toml` | `0.6.0` |
-| `config/settings.py` | `0.7.0` |
-| `README.md`, `agent/prompts.py` 설명 | `0.8.0` |
+| 사이드바 | LLM 연결 상태, 긴급 알림, 공지 RAG 문서 수, 사용 예시. |
+| 챗봇 탭 | 대화 표시, 빠른 명령 버튼, LangGraph 스트리밍 호출, RAG 후속 액션 버튼. |
+| 과제 대시보드 | 과제 목록 DataEditor 표시, 완료 체크 시 DB 업데이트. |
+| 캘린더 탭 | 월별 캘린더, 일정·과제 배지, 월 이동, 필터. |
+| 설정 탭 | 전공, 학년, 마감 알림 기준일, 선호 LLM 표시. |
 
-이 부분은 발표/보고서/앱 화면에서 혼동될 수 있으므로 하나의 버전으로 정리하는 것이 좋다.
+좋은 점은 사용자 흐름이 명확하다는 것이다. 자연어 입력을 중심에 두면서도 과제와 캘린더는 직접 조작 가능한 대시보드로 제공한다.
 
-## 5. 환경변수와 보안 관련 파일
-
-`.env`에는 `GOOGLE_API_KEY` 키 이름이 존재한다. 실제 값은 보고서에 기록하지 않는다. `config/settings.py`는 다음 우선순위로 LLM 제공자를 감지한다.
-
-1. `LLM_PROVIDER`가 `auto`가 아니면 해당 값 사용
-2. `GOOGLE_API_KEY`가 있으면 `gemini`
-3. `OPENAI_API_KEY`가 있으면 `openai`
-4. 둘 다 없으면 `none`
-
-기본 모델은 Gemini 사용 시 `gemini-2.5-flash`, OpenAI 사용 시 `gpt-3.5-turbo`이다.
-
-주의: `testsprite_tests/tmp/config.json` 안에는 외부 테스트 도구 설정과 민감할 수 있는 API/프록시 값이 들어 있다. 이 파일은 Git에 포함하거나 제출 자료에 그대로 첨부하지 않는 것이 안전하다.
-
-## 6. `app.py` 상세 분석
-
-`app.py`는 Streamlit 기반 메인 애플리케이션이다. 주요 화면 구성은 사이드바와 4개 탭이다.
-
-사이드바 기능:
-
-- 앱 이름/버전/설명 표시
-- LLM API 키 설정 여부 표시
-- 오늘 마감 과제, 오늘 일정, 시험 D-day 긴급 알림
-- ChromaDB 공지사항 저장 문서 수 표시
-- 사용 예시 안내
-
-메인 탭:
-
-- `챗봇`: 자연어 대화, 빠른 명령 버튼, LangGraph 스트리밍 처리
-- `과제 대시보드`: SQLite 과제 목록을 DataFrame/DataEditor로 표시, 완료 체크 시 DB 업데이트
-- `캘린더`: 월별 달력 렌더링, 일정/과제 배지 표시, 월 이동
-- `설정`: 전공, 학년, 알림 기준일, 선호 LLM 값 저장
-
-좋은 점:
-
-- 사용자가 자주 쓰는 명령을 버튼으로 제공해 진입 장벽을 낮춘다.
-- 과제 완료 처리를 대시보드에서 직접 체크할 수 있다.
-- `current_time`, `user_major`, `user_grade`를 에이전트에 주입하여 상대 날짜와 개인화 검색을 지원한다.
-- 공지 검색 후 후속 액션 버튼을 제공해 “검색 → 일정/과제 등록” 흐름을 고려했다.
-
-리스크:
-
-- Streamlit `st.session_state.messages`와 LangGraph `MemorySaver`가 동시에 대화 상태를 가진다. UI 표시 메모리와 LangGraph 내부 메모리가 어긋날 가능성이 있다.
-- `thread_id`가 `"streamlit_session"` 하나로 고정되어 있어 사용자별/세션별 분리가 약하다.
-- `app.py` 안에 CSS/달력 렌더링/채팅 처리/DB 호출이 모두 들어 있어 파일이 커졌고, 장기적으로는 모듈 분리가 필요하다.
+리스크는 `app.py`가 UI, CSS, DB 호출, LangGraph 호출, 채팅 저장, 캘린더 렌더링을 모두 포함해 점점 커지고 있다는 점이다. 11주차 이후 서브태스크 UI까지 들어가면 `app.py` 분리 필요성이 커진다.
 
 ## 7. Agent 계층 분석
 
 ### 7.1 `agent/graph.py`
 
-`agent/graph.py`는 LangGraph 에이전트의 중심 파일이다.
+`agent/graph.py`는 LangGraph 에이전트의 중심이다.
 
-구성:
+현재 바인딩되는 도구 수는 총 24개다.
 
-- `TASK_TOOLS + CALENDAR_TOOLS + RAG_TOOLS`를 `ALL_TOOLS`로 통합
-- `get_llm_provider()`에 따라 Gemini 또는 OpenAI 모델 생성
-- `bind_tools(ALL_TOOLS)`로 LLM에 도구 바인딩
-- `StateGraph(AgentState)` 구성
-- `agent` 노드에서 LLM 호출
-- `tools` 노드에서 `ToolNode(ALL_TOOLS)` 실행
-- `should_continue()`가 마지막 AI 메시지의 `tool_calls` 여부를 보고 반복 여부 결정
-- `MemorySaver`를 checkpointer로 사용
+| 도구 묶음 | 개수 |
+|---|---:|
+| `TASK_TOOLS` | 5 |
+| `CALENDAR_TOOLS` | 6 |
+| `RAG_TOOLS` | 5 |
+| `STUDENT_INFO_TOOLS` | 8 |
+| 합계 | 24 |
 
-현재 메모리 구조:
+README의 아키텍처 설명에는 아직 “20개 도구” 표현이 남아 있어 최신 코드와 다르다. README 보완 시 24개 또는 “20개 이상”으로 갱신하는 것이 좋다.
 
-- 세션 안에서는 LangGraph가 메시지를 누적한다.
-- 앱 재시작 후에도 유지되는 장기기억은 구현되어 있지 않다.
-- 장기기억 문제를 해결하려면 `MemorySaver` 대신 SQLite 기반 checkpointer 또는 별도 conversation memory 테이블이 필요하다.
+구현 흐름은 단순하고 읽기 쉽다.
+
+- `get_llm_provider()`로 Gemini/OpenAI 자동 감지.
+- 사용 가능한 API 키가 있으면 모델 생성 후 `bind_tools(ALL_TOOLS)` 호출.
+- API 키가 없으면 설정 안내 AIMessage 반환.
+- 마지막 AIMessage에 `tool_calls`가 있으면 `ToolNode`로 이동.
+- 도구 실행 후 다시 agent 노드로 돌아와 최종 응답 생성.
+- `MemorySaver`로 실행 중 대화 상태를 유지.
 
 ### 7.2 `agent/state.py`
 
-`AgentState`는 다음 필드를 가진다.
+`AgentState`는 `messages`, `current_context`, `tool_calls_count`를 가진다.
 
-- `messages`: LangChain 메시지 시퀀스, `operator.add`로 누적
-- `current_context`: 현재 시간, 전공, 학년 등 실행 컨텍스트
-- `tool_calls_count`: 정의되어 있으나 현재 `graph.py`에서는 실질적으로 사용되지 않는다.
-
-`tool_calls_count`는 무한 도구 호출 방지용으로 확장할 수 있지만 현재는 동작 로직에 연결되어 있지 않다.
+`tool_calls_count`는 정의되어 있지만 현재 그래프 로직에서는 사용되지 않는다. 무한 도구 호출 방지나 재시도 제한을 넣을 때 활용할 수 있는 필드지만, 지금은 미사용 상태다.
 
 ### 7.3 `agent/prompts.py`
 
-시스템 프롬프트는 CampusAgent의 역할을 다음과 같이 정의한다.
+프롬프트는 과제, 일정, 공지사항, 대학생 정보 검색 사용 규칙을 꽤 상세히 담고 있다. 특히 상대 날짜를 현재 시스템 시간 기준으로 절대 날짜로 변환하라는 지시가 있어 Pydantic 날짜 검증과 잘 맞는다.
 
-- 과제 관리
-- 일정/캘린더 관리
-- RAG 기반 공지사항 검색
-- 마감/D-day 알림
+보완점은 두 가지다.
 
-프롬프트는 도구별 사용 가이드, 한국어 응답 규칙, 날짜/시간 파싱 기준, 사용자 전공/학년 활용 규칙을 포함한다. 특히 상대 날짜를 현재 시스템 시간을 기준으로 절대 날짜로 변환하라는 지시가 들어 있어 Pydantic validator와 잘 맞도록 설계되어 있다.
+- 현재 프롬프트는 도구 결과를 항상 엄격한 템플릿으로 재구성하라고 지시하지만, 실제 도구 응답 자체도 이미 긴 마크다운을 반환한다. 모델이 도구 응답을 다시 포장하면서 중복되거나 길어질 수 있다.
+- 11주차 과제 자동 분해 도구가 추가되면 과제 관리 도구 목록과 사용 규칙을 반드시 갱신해야 한다.
 
-## 8. Database 계층 분석
+## 8. SQLite 저장소 분석
 
-### 8.1 `database/models.py`
+`database/db.py`는 현재 다음 테이블을 생성한다.
 
-Pydantic 모델은 크게 과제와 일정으로 나뉜다.
+| 테이블 | 역할 |
+|---|---|
+| `assignments` | 과제 저장. |
+| `schedules` | 일정 저장. |
+| `user_settings` | 전공, 학년, 알림 기준일 등 사용자 설정. |
+| `conversation_sessions` | 대화 세션 기본 정보. |
+| `conversation_messages` | user/assistant/system/tool 메시지 원문 저장. |
+| `memory_summaries` | 장기기억 요약 저장. |
 
-과제 모델:
+장기기억 함수는 다음이 구현되어 있다.
 
-- `AssignmentCreate`
-- `Assignment`
-- `AssignmentStatus`
+- `get_or_create_conversation_session`
+- `save_conversation_message`
+- `load_recent_conversation_messages`
+- `save_memory_summary`
+- `get_latest_memory_summary`
+- `clear_conversation_history`
 
-일정 모델:
+현재 장기기억은 “대화 원문 저장과 최근 메시지 복원”까지는 구현되어 있다. 다만 자동 요약 생성 트리거는 없다. 즉 `memory_summaries` 테이블과 함수는 준비되어 있지만, 앱 흐름에서 `save_memory_summary()`를 호출하는 코드는 아직 없다.
 
-- `ScheduleCreate`
-- `Schedule`
-- `ScheduleCategory`
+개선 포인트는 다음과 같다.
 
-검증 규칙:
+- `streamlit_session` 단일 세션 ID를 사용자별 또는 대화방별 ID로 분리한다.
+- 메시지 수가 일정 기준을 넘으면 요약을 생성하고 `memory_summaries`에 저장한다.
+- `conversation_messages`가 계속 커지는 것을 막기 위해 보존 정책을 둔다.
+- `get_upcoming_assignments()`는 문자열 `BETWEEN` 비교를 사용하므로 `YYYY-MM-DD HH:MM` 경계값을 더 엄밀히 다룰 여지가 있다.
 
-- 과제 제목과 일정 제목은 빈 문자열 금지
-- 과제 마감일은 `YYYY-MM-DD` 또는 `YYYY-MM-DD HH:MM`
-- 일정 날짜는 `YYYY-MM-DD`
+## 9. 데이터 모델 분석
 
-장점은 자연어 입력이 DB에 들어가기 전에 형식 검증이 된다는 점이다. 단점은 “내일”, “다음 주 수요일” 같은 상대 날짜가 모델에 직접 들어오면 실패하므로, 반드시 에이전트가 먼저 절대 날짜로 변환해야 한다.
+`database/models.py`는 Pydantic 모델로 과제와 일정을 검증한다.
 
-### 8.2 `database/db.py`
+| 모델 | 역할 |
+|---|---|
+| `AssignmentCreate` | 과제 생성 요청 검증. |
+| `Assignment` | DB 조회 과제 표현. |
+| `AssignmentStatus` | `pending`, `in_progress`, `done`, `overdue`. |
+| `ScheduleCreate` | 일정 생성 요청 검증. |
+| `Schedule` | DB 조회 일정 표현. |
+| `ScheduleCategory` | `class`, `exam`, `personal`, `meeting`, `other`. |
 
-SQLite 파일 경로는 기본적으로 `campus_tasks.db`이다. 생성되는 테이블은 다음과 같다.
+날짜 검증은 명확하다.
 
-| 테이블 | 역할 | 주요 컬럼 |
-|---|---|---|
-| `assignments` | 과제 저장 | `id`, `title`, `course_name`, `description`, `due_date`, `status`, `priority`, `created_at` |
-| `schedules` | 일정 저장 | `id`, `title`, `date`, `start_time`, `end_time`, `category`, `description`, `is_recurring`, `created_at` |
-| `user_settings` | 사용자 설정 저장 | `key`, `value` |
+- 과제 마감일은 `YYYY-MM-DD` 또는 `YYYY-MM-DD HH:MM`.
+- 일정 날짜는 `YYYY-MM-DD`.
 
-구현된 함수:
+이 구조는 DB에 자연어 날짜가 들어가는 것을 막는 장점이 있다. 대신 “내일”, “다음 주 수요일” 같은 표현은 에이전트가 도구 호출 전에 반드시 절대 날짜로 바꿔야 한다.
 
-- 사용자 설정: `set_user_setting`, `get_user_setting`
-- 과제: `add_assignment`, `get_assignments`, `get_assignment_by_id`, `update_assignment_status`, `delete_assignment`, `get_upcoming_assignments`
-- 일정: `add_schedule`, `get_schedules`, `get_schedules_by_date_range`, `get_today_schedules`, `delete_schedule`, `get_schedule_by_id`, `get_dday_schedules`
+11주차 서브태스크 기능을 구현하려면 `SubtaskCreate`, `Subtask`, 진행률 표현 모델이 추가될 가능성이 높다.
 
-개선 포인트:
+## 10. MCP Tool 계층 분석
 
-- `get_upcoming_assignments()`는 `due_date BETWEEN YYYY-MM-DD AND YYYY-MM-DD` 문자열 비교를 사용한다. `YYYY-MM-DD HH:MM`도 허용되므로 경계 조건에서 날짜/시간 비교를 더 엄밀히 다루는 것이 좋다.
-- `update_assignment_status()`는 업데이트 후 조회하지만, 존재하지 않는 ID도 `UPDATE` 자체는 에러가 아니므로 조회 결과로 None을 반환한다. 현재 동작은 적절하다.
-- SQLite 연결은 매 함수마다 열고 닫는 단순 구조라 현재 규모에는 충분하다.
+이 저장소의 `mcp_servers/`는 실제 독립 MCP 서버 프로세스라기보다 LangChain `@tool` 함수 모음에 가깝다.
 
-## 9. MCP Tool 계층 분석
+### 10.1 과제 도구
 
-이 프로젝트의 `mcp_servers`는 실제 독립 MCP 서버 프로세스라기보다 LangChain `@tool` 함수 모음에 가깝다.
-
-### 9.1 `mcp_servers/task_server.py`
-
-과제 도구 5개:
+`mcp_servers/task_server.py`는 5개 도구를 제공한다.
 
 - `add_task`
 - `list_tasks`
@@ -269,11 +270,11 @@ SQLite 파일 경로는 기본적으로 `campus_tasks.db`이다. 생성되는 �
 - `delete_task`
 - `get_upcoming_deadlines`
 
-모든 도구는 예외를 잡아 사용자 친화적인 한국어 문자열로 반환한다. `TASK_TOOLS` 리스트로 LangGraph에 바인딩된다.
+기존 CRUD 범위는 안정적이다. 11주차 목표인 “과제 자동 분해 + 서브태스크 트리”는 아직 미구현이므로 이 파일이 다음 핵심 변경 지점이다.
 
-### 9.2 `mcp_servers/calendar_server.py`
+### 10.2 캘린더 도구
 
-캘린더 도구 6개:
+`mcp_servers/calendar_server.py`는 6개 도구를 제공한다.
 
 - `add_calendar_event`
 - `list_calendar_events`
@@ -282,11 +283,11 @@ SQLite 파일 경로는 기본적으로 `campus_tasks.db`이다. 생성되는 �
 - `delete_calendar_event`
 - `check_dday`
 
-일정 추가 시 `ScheduleCreate`를 통해 날짜 형식을 검증한다. D-day는 `datetime.now()` 기준으로 계산한다.
+일정 추가는 `ScheduleCreate`를 통해 날짜 형식을 검증한다. 현재 테스트도 충분히 기본 CRUD와 D-day를 커버한다.
 
-### 9.3 `mcp_servers/rag_server.py`
+### 10.3 공지사항 RAG 도구
 
-RAG 도구 5개:
+`mcp_servers/rag_server.py`는 5개 도구를 제공한다.
 
 - `search_university_notices`
 - `search_school_notices`
@@ -294,384 +295,286 @@ RAG 도구 5개:
 - `load_notice_data`
 - `get_notice_stats`
 
-학과 공지 검색은 먼저 ChromaDB 캐시에서 관련도가 높은 결과를 찾고, 부족하면 실시간 크롤링을 수행한다. 학교 대표 홈페이지 검색은 실시간 크롤링 후 ChromaDB에 저장한다. 검색 결과는 제목, 날짜, 카테고리, 본문 일부, 첨부파일, URL을 포함해 반환한다.
+학과 공지 검색은 먼저 ChromaDB 캐시를 확인하고, 관련 결과가 부족하면 학과 홈페이지를 실시간 크롤링한다. 학교 대표 공지 검색은 대표 홈페이지를 실시간 크롤링한 뒤 ChromaDB에 저장한다.
 
-주의할 점:
+주의할 점은 `clear_notice_data`가 ChromaDB 컬렉션 전체를 삭제한다는 것이다. 현재 공지사항과 대학생 정보가 같은 컬렉션을 공유하므로, 이 도구는 student-info 데이터까지 함께 지울 수 있다.
 
-- `config/mcp_config.json`의 `rag_server.tools`에는 `search_school_notices`가 빠져 있다. 실제 코드에서는 `RAG_TOOLS`에 포함되어 사용 가능하지만, 설정 파일과 코드가 불일치한다.
-- 실시간 크롤링은 네트워크와 학교 홈페이지 구조에 의존한다. 홈페이지 HTML 구조 변경 시 파서가 깨질 수 있다.
+### 10.4 대학생 정보 도구
 
-## 10. RAG 파이프라인 분석
+`mcp_servers/student_info_server.py`는 현재 8개 도구를 제공한다.
 
-### 10.1 `rag/loader.py`
+- `search_student_info`
+- `search_student_info_live`
+- `search_transfer_by_school`
+- `search_scholarship_policy`
+- `search_job_intern`
+- `search_contest_external`
+- `load_student_info_data`
+- `get_student_info_stats`
 
-JSON 또는 텍스트 파일을 공지사항 문서 리스트로 변환한다. JSON 입력은 `title`, `content`, `date`, `category`, `source`를 기대하고, 검색용 `full_text`를 생성한다.
+이 영역은 기존 research.md보다 크게 확장되었다. 학교 대표 공지 기반 실시간 검색뿐 아니라 어디가, 온통청년, 워크넷, K-스타트업까지 연결되어 있다.
 
-### 10.2 `rag/chunker.py`
+주의할 점은 외부 API 키가 없으면 일부 도구가 설정 안내를 반환한다는 것이다. 이 동작은 실패가 아니라 정상적인 fallback이다.
 
-`SimpleTextChunker`는 긴 텍스트를 기본 500자 단위, 50자 overlap으로 분할한다. 문장 경계를 최대한 보존하려고 `\n\n`, `\n`, `. `, `? `, `! ` 위치를 찾는다.
+## 11. RAG 파이프라인 분석
 
-리스크:
+### 11.1 `rag/loader.py`
 
-- 한국어 문장 종결(`다.`, `요.` 등)을 별도로 다루지는 않는다.
-- overlap 계산이 단순하여 특정 짧은 구간에서는 중복이 커질 수 있다.
+JSON 또는 텍스트 파일을 표준 dict 리스트로 변환한다. 공지사항 샘플 데이터에는 충분하지만, student-info 전용 필드인 `deadline`, `target`은 별도 로더가 더 잘 보존한다. 실제로 student-info 쪽은 `_load_student_info_from_json()`을 따로 구현해 사용한다.
 
-### 10.3 `rag/embedder.py`
+### 11.2 `rag/chunker.py`
 
-ChromaDB `PersistentClient`를 사용해 `chroma_db_storage`에 영속 저장한다. 컬렉션 이름은 `university_notices`이고, 코사인 거리 기반 HNSW 설정을 사용한다.
+`SimpleTextChunker`는 기본 500자, overlap 50자로 텍스트를 자른다. 문장 경계로 `\n\n`, `\n`, `. `, `? `, `! `를 고려한다.
 
-기능:
+한국어 문장 종결인 `다.`, `요.` 같은 패턴을 특별히 처리하지는 않는다. 검색 품질을 높이려면 한국어 문장 경계 처리 또는 토큰 기반 청킹을 검토할 수 있다.
 
-- `embed_and_store()`: 문서 upsert
-- `get_collection_count()`: 문서 수 반환
-- `clear_collection()`: 컬렉션 삭제 후 재생성
+### 11.3 `rag/embedder.py`와 `rag/retriever.py`
 
-### 10.4 `rag/retriever.py`
+ChromaDB `PersistentClient`를 사용한다. 컬렉션 이름은 `university_notices` 하나다.
 
-ChromaDB 컬렉션에서 `query_texts` 기반 검색을 수행한다. 반환값에는 `text`, `title`, `date`, `category`, `source`, `url`, `distance`, `relevance`가 포함된다. `relevance`는 `1 - distance`로 계산한다.
+장점은 구조가 단순하다는 것이다. 단점은 공지사항과 대학생 정보가 같은 컬렉션을 공유해 데이터 관리 경계가 약하다는 것이다. 현재는 `category`와 `source` metadata로 구분하지만, `clear_notice_data` 같은 전체 삭제 도구에는 취약하다.
 
-### 10.5 `rag/crawler.py`
+### 11.4 `rag/crawler.py`
 
-가장 큰 파일이며, 학과 공지와 학교 대표 홈페이지 공지 크롤러를 모두 포함한다.
+학과 공지와 대표 홈페이지 공지 크롤러가 함께 들어 있다.
 
-학과 공지:
+| 대상 | 구현 방식 |
+|---|---|
+| 학과 공지 | K2Web BBS, `enc` 파라미터 생성, 목록·상세·첨부 추출. |
+| 학교 대표 공지 | `combBbs`, `javascript:jf_combBbs_view(...)` URL 변환, 목록·상세·첨부 추출. |
 
-- 대상: 인하공업전문대학 컴퓨터시스템공학과
-- 시스템: K2Web BBS
-- `enc` 파라미터를 base64로 생성
-- 목록 크롤링 후 상세 페이지에서 본문/첨부파일 추출
+크롤러는 요청 간 1초 딜레이와 User-Agent를 사용한다. 다만 학교 홈페이지 HTML 구조가 바뀌면 파서가 깨질 수 있으므로, live 검색 실패는 코드 버그와 네트워크·원격 구조 변경을 구분해야 한다.
 
-학교 대표 공지:
+### 11.5 `rag/external_crawler.py`
 
-- 대상: 인하공업전문대학 대표 홈페이지
-- 시스템: `combBbs`
-- `javascript:jf_combBbs_view(...)` 형식 URL을 실제 상세 URL로 변환
-- 목록/상세/첨부파일 추출
+외부 대학생 정보 소스를 다룬다.
 
-카테고리 추정:
+| 함수 | 소스 | 성격 |
+|---|---|---|
+| `crawl_transfer_by_school` | 어디가 | HTML 크롤링. |
+| `fetch_youth_policy` | 온통청년 | API 키 필요. |
+| `fetch_worknet_jobs` | work24 워크넷 | API 키 필요, XML 파싱. |
+| `crawl_kstartup_contest` | K-스타트업 | HTML 크롤링. |
 
-- 장학, 취업, 학사, 행사, 일반 키워드 기반으로 분류한다.
+주의할 점은 `crawl_transfer_by_school()`이 실제 결과가 없어도 안내용 fallback 항목을 반환한다는 것이다. 사용자 경험에는 좋지만, “실제 크롤링 성공”과 “직접 확인 안내”를 구분해 보고할 때는 주의해야 한다.
 
-## 11. 데이터 파일 분석
+## 12. 설정 파일 분석
 
-### 11.1 `data/sample_notices.json`
+`config/settings.py`는 다음 환경변수를 읽는다.
 
-샘플 공지 10건이 들어 있다.
+| 변수 | 역할 |
+|---|---|
+| `GOOGLE_API_KEY` | Gemini 사용. |
+| `OPENAI_API_KEY` | OpenAI 사용. |
+| `LLM_PROVIDER` | `auto`, `gemini`, `openai`, `none`. |
+| `LLM_MODEL` | 모델명 직접 지정. |
+| `LLM_TEMPERATURE` | 모델 temperature. |
+| `SQLITE_DB_PATH` | SQLite DB 경로 override. |
+| `CHROMA_DB_DIR` | ChromaDB 경로 override. |
+| `YOUTH_CENTER_API_KEY` | 온통청년 API. |
+| `WORKNET_API_KEY` | 워크넷 API. |
 
-카테고리 분포:
+현재 `.env` 파일은 존재하지만, 민감정보 보호를 위해 실제 값은 분석 문서에 기록하지 않는다.
 
-- 학사: 4건
-- 장학: 2건
-- 일반: 3건
-- 취업: 1건
+`config/mcp_config.json`은 RAG 도구 목록에는 현재 코드와 맞게 `search_school_notices`가 포함되어 있다. 그러나 `student_info_server.tools`에는 실제 8개 도구 중 3개만 적혀 있다. 현재 LangGraph는 이 JSON이 아니라 Python의 `STUDENT_INFO_TOOLS`를 직접 사용하므로 앱 동작에는 큰 영향이 없지만, 문서·레지스트리 용도로는 불일치다.
 
-용도는 RAG 테스트와 초기 로드용이다. 날짜는 2026년 3~4월 중심으로 구성되어 있다.
+보완 필요 목록은 다음과 같다.
 
-### 11.2 `data/crawled_notices_cse.json`
+- `search_student_info_live`
+- `search_transfer_by_school`
+- `search_scholarship_policy`
+- `search_job_intern`
+- `search_contest_external`
 
-실제 크롤링된 컴퓨터시스템공학과 공지 30건이 들어 있다.
+## 13. 데이터 파일 분석
 
-카테고리 분포:
+### 13.1 `data/sample_notices.json`
 
-- 학사: 10건
-- 장학: 12건
-- 일반: 1건
-- 취업: 7건
+공지사항 샘플 10건이 있다. 학사, 장학, 일반, 취업 카테고리를 포함한다. RAG 기본 테스트와 로컬 로드 시연에 적합하다.
 
-파일 크기가 약 232KB로 비교적 크고, 첨부파일 URL과 본문 전체가 포함되어 있어 RAG 데이터셋으로 사용하기 좋다.
+### 13.2 `data/crawled_notices_cse.json`
 
-## 12. 저장소 파일 분석
+컴퓨터시스템공학과 공지 30건이 들어 있다. 크기는 약 232KB이며 본문과 첨부파일 정보가 포함되어 있다. 실제 공지 검색 데이터셋으로 활용 가치가 높다.
 
-### 12.1 `campus_tasks.db`
+### 13.3 `data/student_info_samples.json`
 
-SQLite 데이터베이스 파일이다. 코드 기준 테이블은 `assignments`, `schedules`, `user_settings`이다. 현재 환경에서 Python 실행이 되지 않아 DB 내부 행 수를 직접 조회하지는 못했다. 다만 `database/db.py`의 `init_sqlite_db()` 기준으로 앱 실행 시 테이블은 자동 생성된다.
+편입학·전공심화, 국가제도·장학, 공모전·현장실습 카테고리 샘플 6건이 있다. `deadline`, `target`, `source`, `url`이 포함되어 있어 student-info 검색 응답의 기반이 된다.
 
-### 12.2 `chroma_db_storage/`
+## 14. 테스트 분석
 
-ChromaDB 영속 저장소이다.
+현재 테스트 파일과 역할은 다음과 같다.
 
-확인된 상태:
+| 파일 | 상태 | 주요 검증 |
+|---|---|---|
+| `tests/test_task.py` | 구현됨 | 과제 CRUD, 상태 변경, 삭제, ID 조회. |
+| `tests/test_calendar.py` | 구현됨 | 일정 CRUD, 날짜 범위, D-day. |
+| `tests/test_memory.py` | 구현됨 | 대화 세션, 메시지 저장/복원, 요약 저장, 삭제. |
+| `tests/test_rag.py` | 구현됨 | 로드, 청킹, ChromaDB 저장, 검색. |
+| `tests/test_student_info.py` | 구현됨 | 샘플 검색, 실시간 크롤러 mock, 외부 도구 fallback. |
+| `tests/test_agent.py` | 비어 있음 | Agent 구성 테스트 없음. |
 
-- `chroma.sqlite3` 파일 존재
-- UUID 형태의 벡터 인덱스 디렉터리 7개 존재
-- 전체 파일 수: 29개
-- 총 크기: 약 3.06MB
-
-이는 공지사항 벡터 데이터가 이미 여러 번 생성/저장된 흔적으로 보인다.
-
-## 13. 테스트 코드와 결과 분석
-
-### 13.1 `tests/test_task.py`
-
-과제 CRUD 테스트이다.
-
-검증 범위:
-
-- 과제 기본 추가
-- 전체 필드 포함 추가
-- 여러 과제 추가
-- 전체 조회
-- 상태 필터
-- 과목 필터
-- 상태 변경
-- 잘못된 상태 검증
-- 존재하지 않는 과제 처리
-- 삭제
-- ID 조회
-
-테스트마다 임시 SQLite DB를 사용하고, `settings.SQLITE_DB_PATH`와 `database.db.SQLITE_DB_PATH`를 함께 바꿔 테스트 격리를 수행한다.
-
-### 13.2 `tests/test_calendar.py`
-
-캘린더 CRUD 테스트이다.
-
-검증 범위:
-
-- 기본 일정 추가
-- 시험 일정 추가
-- 반복 일정 추가
-- 전체 조회
-- 카테고리 필터
-- 날짜 필터
-- 날짜 범위 조회
-- 삭제
-- ID 조회
-- D-day 계산
-
-### 13.3 `tests/test_rag.py`
-
-RAG 파이프라인 테스트이다.
-
-검증 범위:
-
-- 샘플 JSON 로드
-- 존재하지 않는 파일 처리
-- 짧은 텍스트 청킹
-- 긴 텍스트 청킹
-- 문서 리스트 청킹
-- ChromaDB 저장
-- 빈 문서 저장
-- 로드 → 청킹 → 임베딩 → 검색 전체 파이프라인
-
-현재 코드에서는 teardown에서 `shutil.rmtree(test_chroma, ignore_errors=True)`를 사용하도록 되어 있어 Windows 파일 잠금 문제를 회피하려는 수정이 반영되어 있다.
-
-### 13.4 `tests/test_agent.py`
-
-비어 있는 파일이다. LangGraph 에이전트 자체, tool routing, memory 동작, API 키 미설정 fallback 등은 아직 자동 테스트가 없다.
-
-### 13.5 `test_output.txt`
-
-이전 테스트 실행 로그가 저장되어 있다. 해당 로그에서는 `tests/test_rag.py` 8개 테스트 본문은 통과했지만, Windows에서 ChromaDB 파일 잠금 때문에 teardown 중 `PermissionError` 3건이 발생했다.
-
-현재 `tests/test_rag.py` 코드에는 `ignore_errors=True`가 들어 있어 이 문제를 완화한 상태로 보인다. 다만 현재 워크스페이스의 Python 실행 환경이 깨져 있어 실제 재실행 검증은 하지 못했다.
-
-## 14. TestSprite 산출물 분석
-
-`testsprite_tests/`에는 자동 테스트 생성 도구의 산출물이 있다.
-
-주요 파일:
-
-- `standard_prd.json`: 백엔드 요구사항/제품 설명
-- `testsprite_backend_test_plan.json`: TC001~TC006 테스트 계획
-- `tmp/code_summary.yaml`: 코드 요약
-- `tmp/config.json`: TestSprite 실행 설정
-- `tmp/mcp.log`, `tmp/execution.lock`, `tmp/prd_files/debug1.txt`: 실행 중간 산출물
-
-중요한 차이:
-
-- TestSprite 산출물은 `/task`, `/calendar`, `/debug/...` 같은 HTTP endpoint를 가정한다.
-- 실제 현재 코드에는 FastAPI/Flask 같은 HTTP 백엔드 endpoint가 없고, Streamlit + LangChain tool 함수 구조이다.
-
-즉 TestSprite PRD는 현재 코드의 실제 인터페이스와 일부 맞지 않는다. 자동 테스트 설계를 계속 쓰려면 “HTTP API 기반 백엔드”를 추가하거나, TestSprite 계획을 Streamlit/함수 호출 기반으로 다시 맞춰야 한다.
-
-## 15. 보조 파일 분석
-
-### 15.1 `README.md`
-
-프로젝트 개요, 아키텍처, 실행 방법, 기능 목록, 개발 일정이 정리되어 있다. 전체적으로 발표/보고서용 설명이 잘 되어 있지만, 실제 코드와 일부 차이가 있다.
-
-차이점:
-
-- README는 구현 기능을 v0.8.0이라고 표기
-- `config/settings.py`는 앱 버전 v0.7.0
-- README의 프로젝트 구조에는 `data/crawled_notices_cse.json`, `testsprite_tests`, `.venv`, `chroma_db_storage` 등이 간략히 생략되어 있음
-- DBeaver 경로가 `c:\Users\kimka\OneDrive\Documents\GitHub\CampusAgent\campus_tasks.db`로 되어 있는데 현재 작업 폴더는 `C:\workspace\CampusAgent`
-
-### 15.2 `gemini_models.txt`
-
-사용 가능한 Gemini/Gemma 계열 모델명이 쉼표로 나열되어 있다. 최신/프리뷰 모델 이름도 포함되어 있어 모델 선택 참고용으로 보인다.
-
-### 15.3 `test.py`
-
-내용은 `print("Hello, World!")`뿐이다. 기능 테스트라기보다는 실행 확인용 임시 파일이다.
-
-### 15.4 `tmp_streamlit.log`
-
-현재 0바이트이다. Streamlit 실행 로그 파일로 의도된 것으로 보이나 내용은 없다.
-
-### 15.5 `.github/copilot-instructions.md`
-
-저장소 전체 개발 지침이 들어 있다. 주요 내용은 Python 3.10+, `streamlit run app.py`, `python -m pytest tests/ -v`, LangGraph/Tool 구조, 날짜 검증 규칙, Streamlit 세션과 LangGraph 메모리 혼동 주의 등이다.
-
-### 15.6 `.claude/settings.local.json`
-
-Claude 도구 권한 설정 파일이다. 특정 Bash 명령 허용 설정만 들어 있다.
-
-### 15.7 `.gitattributes`
-
-텍스트 파일 자동 감지와 LF 정규화 설정이다.
-
-## 16. 가상환경과 생성 파일
-
-### 16.1 `venv/`
-
-대량의 Python 패키지가 설치된 가상환경이다. 파일 수가 매우 많으며 전체 가상환경/`.venv` 합산 기준 약 22,686개 파일, 약 625MB 규모이다.
-
-현재 `venv\Scripts\python.exe --version` 실행은 실패했다.
-
-오류 요약:
+현재 실행 결과는 다음과 같다.
 
 ```text
-Unable to create process using ... venv\Scripts\python.exe
+python -m pytest tests -q
+48 passed, 1 warning in 13.27s
 ```
 
-이는 가상환경이 원래 생성된 Python 경로나 인터프리터 참조가 현재 위치와 맞지 않거나 손상되었을 가능성이 있다.
+경고는 Python 3.14 환경에서 ChromaDB가 `asyncio.iscoroutinefunction`을 사용하는 데 따른 DeprecationWarning이다. 기능 실패는 아니다.
 
-### 16.2 `.venv/`
+테스트 품질상 가장 큰 빈틈은 `tests/test_agent.py`가 비어 있다는 점이다. LangGraph 도구 라우팅, API 키 없음 fallback, `current_context` 주입, `ALL_TOOLS` 구성 검증은 아직 자동화되어 있지 않다.
 
-별도 가상환경 또는 uv 기반 환경으로 보인다. `.venv\Scripts\python.exe --version` 실행은 실패했다.
+## 15. TestSprite 산출물 분석
 
-오류 요약:
+`testsprite_tests/`에는 자동 테스트 생성 도구 산출물이 있다.
 
-```text
-error: uv trampoline failed to spawn Python child process
-Caused by: permission denied (os error 5)
-```
+문제는 이 산출물이 현재 코드의 실제 인터페이스와 맞지 않는다는 점이다.
 
-따라서 현재는 `.venv`도 즉시 사용할 수 있는 Python 환경이 아니다.
+| TestSprite 가정 | 실제 코드 |
+|---|---|
+| `POST /task` HTTP endpoint | 없음. LangChain `@tool` 함수와 Streamlit UI 중심. |
+| `POST /calendar` HTTP endpoint | 없음. |
+| `/debug/memory_snapshot` 등 debug endpoint | 없음. |
+| HTTP backend service | 현재는 Streamlit 앱 + 로컬 Python 모듈 구조. |
 
-### 16.3 `__pycache__/`
+따라서 TestSprite 계획은 현재 기준으로 “참고용 요구사항 산출물”에 가깝고, 자동 테스트 근거로 바로 쓰기 어렵다. 계속 활용하려면 FastAPI 같은 HTTP 계층을 실제로 추가하거나, TestSprite 계획을 함수 호출·Streamlit 흐름 기준으로 다시 작성해야 한다.
 
-Python 바이트코드 캐시이다. `cpython-311`, `cpython-312`, `cpython-313` 캐시가 섞여 있어 여러 Python 버전에서 실행된 흔적이 있다. Git 관리나 제출물에서는 제외하는 것이 좋다.
+`testsprite_tests/tmp/config.json` 같은 tmp 파일은 도구 실행 설정과 민감할 수 있는 값이 들어갈 수 있으므로 제출물이나 공개 저장소에 포함하지 않는 것이 안전하다.
+
+## 16. 문서 상태 분석
+
+### 16.1 `README.md`
+
+README는 전체 설명이 잘 되어 있지만 현재 코드와 일부 차이가 있다.
+
+- 아키텍처 설명의 도구 수가 20개로 되어 있으나 실제 바인딩 도구는 24개다.
+- 대학생 정보 검색 표에는 4개 도구만 소개되어 있으나 실제 도구는 8개다.
+- 테스트 수는 “44개”로 표현되어 있으나 현재는 48개 테스트가 통과한다.
+- `data/crawled_notices_cse.json`, `testsprite_tests`, 런타임 상태 파일 설명은 축약되어 있다.
+
+README는 발표·사용자 안내용으로 좋지만, 다음 문서 정리 때 최신 도구 수와 테스트 수를 갱신하는 것이 좋다.
+
+### 16.2 `md_file/plan.md`
+
+전체 15주 로드맵을 담고 있으며, 현재 코드와 대체로 맞는다. 11주차 목표는 과제 자동 분해와 서브태스크 트리다. 현재 코드에는 아직 반영되지 않았으므로 `plan.md`의 11주차는 앞으로 구현할 항목으로 봐야 한다.
+
+### 16.3 `md_file/week_10_plan.md`와 `week_10_report.md`
+
+10주차의 장기기억과 대학생 정보 검색 구현 흐름을 잘 설명한다. 현재 코드와 가장 잘 맞는 문서다.
+
+다만 `week_10_report.md`의 프로젝트 구조 하단에는 `tests/test_student_info.py` 설명이 “신규: 대학생 정보 2개 테스트”로 남아 있는데, 현재는 8개 테스트다. 표의 테스트 결과는 8개로 맞게 적혀 있어 일부 설명만 오래됐다.
+
+### 16.4 `md_file/week_11_plan.md`
+
+과제 자동 분해 기능의 구현 계획이 상세하다. 현재 시점에서는 아직 계획 문서이며, 코드에는 `assignment_subtasks` 테이블이나 자동 분해 도구가 없다.
+
+중요한 점은 `cleanup_plan.md`와 `week_11_plan.md`가 서브태스크 저장 방식에서 서로 다른 방향을 제시한다는 것이다.
+
+- `week_11_plan.md`: 별도 `assignment_subtasks` 테이블 권장.
+- `cleanup_plan.md`: `assignments`에 `parent_id`, `progress` 컬럼 추가 제안.
+
+데이터 안전과 기존 CRUD 유지 관점에서는 `week_11_plan.md`의 별도 테이블 방식이 더 안전하다.
+
+### 16.5 `md_file/verification_guide.md`
+
+외부 API와 Streamlit end-to-end 검증 절차가 잘 정리되어 있다. 단, 이 문서는 `.env`에 API 키가 설정되어 있다는 전제를 둔다. 공개 제출용 문서로 쓸 때는 키 존재 여부만 말하고 실제 값을 기록하지 않아야 한다.
 
 ## 17. 현재 동작 가능성 평가
 
-코드 구조 자체는 명확하고, CampusAgent의 핵심 기능은 일관된 방향으로 구현되어 있다. 다만 현재 폴더 상태 기준으로 “바로 실행 가능”하다고 단정하기는 어렵다.
+현재 로컬 환경에서는 Python과 pytest가 정상 동작한다. 전체 테스트도 통과했다.
 
-현재 확인된 실행 리스크:
+| 항목 | 현재 평가 |
+|---|---|
+| Python 실행 | 정상. |
+| pytest 실행 | 정상, 48개 통과. |
+| SQLite 테스트 격리 | 임시 DB로 동작. |
+| ChromaDB 테스트 격리 | 임시 디렉터리로 동작, teardown은 `ignore_errors=True`. |
+| Streamlit 수동 실행 | 이번 분석에서는 실행하지 않음. |
+| 외부 API live 검증 | 이번 분석에서는 실행하지 않음. |
+| `.env` 값 확인 | 보안상 raw 값 미확인. |
 
-- `python` 명령이 PATH에 없음
-- `py` 명령도 없음
-- `venv\Scripts\python.exe` 실행 실패
-- `.venv\Scripts\python.exe` 실행 실패
-- 기존 테스트 로그에는 ChromaDB 파일 잠금 문제가 있었음
-- 현재 테스트 재실행은 불가
-- `mcp_config.json`과 실제 `RAG_TOOLS` 목록 불일치
-- 버전 표기 불일치
+코드 구조상 기본 기능은 실행 가능한 상태로 판단된다. 다만 외부 API와 크롤링은 원격 사이트 상태, API 키, 네트워크에 따라 달라지므로 자동 테스트 결과만으로 live 기능 전체를 보장할 수는 없다.
 
-그래도 코드상 기능 구현 상태는 다음 수준으로 판단된다.
+## 18. 핵심 리스크와 개선 우선순위
 
-| 기능 | 코드 구현 | 테스트 | 비고 |
-|---|---|---|---|
-| 과제 CRUD | 구현됨 | 단위 테스트 있음 | 환경 복구 후 재검증 필요 |
-| 캘린더 CRUD | 구현됨 | 단위 테스트 있음 | 환경 복구 후 재검증 필요 |
-| RAG 로드/청킹/검색 | 구현됨 | 단위 테스트 있음 | Windows ChromaDB 잠금 이슈 대응 코드 있음 |
-| 실시간 학과 공지 크롤링 | 구현됨 | 직접 테스트 없음 | 홈페이지 구조/네트워크 의존 |
-| 실시간 학교 공지 크롤링 | 구현됨 | 직접 테스트 없음 | `mcp_config.json` 누락 있음 |
-| Streamlit UI | 구현됨 | 자동 테스트 없음 | 수동 실행 확인 필요 |
-| LangGraph Tool routing | 구현됨 | 자동 테스트 없음 | API 키 필요 |
-| 세션 메모리 | MemorySaver 구현 | 자동 테스트 없음 | 앱 재시작 후 장기기억은 아님 |
+### 1순위: `config/mcp_config.json` student-info 도구 목록 동기화
 
-## 18. 핵심 문제와 개선 우선순위
+실제 `STUDENT_INFO_TOOLS`는 8개지만 설정 파일에는 3개만 있다. 현재 앱은 Python 리스트를 직접 쓰므로 즉시 장애는 아니지만, 문서·레지스트리·외부 도구 연동 기준으로는 불일치다.
 
-### 1순위: Python 실행 환경 복구
+### 2순위: `tests/test_agent.py` 작성
 
-현재 가장 큰 병목은 코드가 아니라 실행 환경이다. 다음 중 하나로 정리해야 한다.
+Agent 계층은 핵심인데 자동 테스트가 없다. 최소한 다음은 테스트하는 것이 좋다.
 
-```powershell
-python -m venv venv
-venv\Scripts\activate
-pip install -e .
-pip install pytest
+- `ALL_TOOLS`에 expected tool name이 모두 들어 있는지.
+- API 키가 없을 때 fallback 메시지를 반환하는지.
+- `current_context`의 현재 시간, 전공, 학년, memory summary가 프롬프트에 반영되는지.
+- tool call이 있으면 `tools` 노드로 가는지.
+
+### 3순위: ChromaDB 컬렉션 분리
+
+공지사항과 대학생 정보가 같은 `university_notices` 컬렉션을 공유한다. 짧게는 metadata 필터로 버틸 수 있지만, 장기적으로는 다음 중 하나를 선택하는 것이 좋다.
+
+- 컬렉션 분리: `university_notices`, `student_info`.
+- 현재 컬렉션 유지 + `doc_type` metadata 필수화.
+- 삭제 도구를 doc type 기준 삭제로 변경.
+
+### 4순위: 요약 메모리 자동 생성
+
+현재 장기기억 테이블은 있지만 자동 요약 생성은 없다. 대화가 길어질수록 최근 메시지 복원만으로는 한계가 생긴다.
+
+권장 흐름은 다음과 같다.
+
+```text
+conversation_messages N개 이상 누적
+-> 최근 대화 요약 생성
+-> save_memory_summary 저장
+-> 오래된 원문은 보존하되 프롬프트에는 요약 중심 주입
 ```
 
-또는 uv를 쓰는 경우 `.venv` 권한 문제를 해결하고 Python interpreter 참조를 복구해야 한다.
+### 5순위: README 최신화
 
-### 2순위: 버전 표기 통일
+README의 도구 수, 테스트 수, student-info 도구 목록이 현재 코드보다 오래됐다. 발표 자료나 제출 자료로 쓰려면 업데이트가 필요하다.
 
-다음 세 위치의 버전을 하나로 통일해야 한다.
+### 6순위: 11주차 과제 자동 분해 구현
 
-- `pyproject.toml`
-- `config/settings.py`
-- `README.md`
-- `agent/prompts.py`
+현재 계획은 잘 정리되어 있다. 구현 시에는 기존 `assignments` 테이블을 크게 바꾸는 방식보다 별도 `assignment_subtasks` 테이블을 추가하는 방식이 안전하다.
 
-발표 자료 기준이라면 현재 구현 소개와 맞춰 `0.8.0` 또는 9주차 이후 버전으로 정리하는 것이 자연스럽다.
+### 7순위: `app.py` 분리
 
-### 3순위: 장기기억 구조 도입
+기능이 늘면서 `app.py`가 529줄까지 커졌다. 당장 문제는 아니지만 서브태스크 UI, 브리핑, 평가 탭이 추가되면 다음처럼 나누는 것이 좋다.
 
-현재 `MemorySaver`는 세션 내 메모리에 가깝다. 앱 재시작 후 대화 기록 복원까지 하려면 다음 구조가 필요하다.
-
-- SQLite에 `conversation_threads`, `conversation_messages`, `memory_summaries` 테이블 추가
-- `thread_id`를 사용자/세션 단위로 분리
-- 앱 시작 시 최근 대화 또는 요약 메모리 로드
-- 일정 길이 이상 누적 시 요약 후 원문 일부 압축
-
-### 4순위: Agent 테스트 추가
-
-`tests/test_agent.py`가 비어 있으므로 아래 테스트가 필요하다.
-
-- API 키가 없을 때 fallback 메시지 반환
-- Tool call이 있으면 `tools` 노드로 이동
-- Tool call이 없으면 END
-- `current_context`가 시스템 프롬프트에 반영되는지
-- `MemorySaver` thread_id별 상태 분리 여부
-
-### 5순위: 설정 파일과 실제 도구 목록 동기화
-
-`config/mcp_config.json`의 `rag_server.tools`에 `search_school_notices`를 추가해야 한다.
-
-현재 실제 코드:
-
-```python
-RAG_TOOLS = [
-    search_university_notices,
-    search_school_notices,
-    clear_notice_data,
-    load_notice_data,
-    get_notice_stats,
-]
-```
-
-현재 설정 파일에는 `search_school_notices`가 없다.
-
-### 6순위: 민감정보 정리
-
-`testsprite_tests/tmp/config.json`은 외부 API/프록시 설정을 포함한다. 제출물이나 공개 저장소에서는 제거하거나 마스킹해야 한다.
+- `ui/sidebar.py`
+- `ui/chat.py`
+- `ui/task_dashboard.py`
+- `ui/calendar_view.py`
+- `ui/settings_view.py`
 
 ## 19. 발표/보고서 관점 해석
 
-현재 CampusAgent는 8주차까지의 중간 발표 자료로 설명하기 좋은 구조를 갖추고 있다.
+현재 CampusAgent는 단순 CRUD 앱보다 기술적으로 설명할 지점이 많다.
 
-잘 보여줄 수 있는 성과:
+강점은 다음이다.
 
-- 단순 챗봇이 아니라 LangGraph + Tool 기반으로 실제 DB 작업을 수행
-- 과제/일정/RAG가 하나의 대화형 에이전트 안에서 연결됨
-- 전공/학년/현재 시간 컨텍스트를 반영하는 개인화 구조가 있음
-- 학과 공지와 학교 대표 공지를 모두 실시간 크롤링하는 확장성이 있음
-- Streamlit UI가 채팅, 대시보드, 캘린더, 설정으로 분리되어 사용 흐름이 명확함
+- LangGraph 기반 도구 호출 구조가 실제 DB와 RAG 작업을 수행한다.
+- SQLite와 ChromaDB를 함께 사용해 구조화 데이터와 비정형 검색을 분리했다.
+- 학과 공지와 학교 대표 공지를 모두 실시간 크롤링한다.
+- 장기기억 저장 테이블과 최근 대화 복원 흐름이 구현되어 있다.
+- 대학생 정보 검색이 샘플 데이터, 학교 공지, 외부 공공 API·크롤러로 확장되어 있다.
+- 테스트가 48개 있고 현재 통과한다.
 
-9주차 장기기억 개선 보고서로 이어가기 좋은 포인트:
+발표에서 조심할 표현은 다음이다.
 
-- 기존 한계: `MemorySaver`는 앱 재시작 후 유지되는 장기기억이 아님
-- 개선 방향: SQLite 기반 대화 이력 저장과 요약 메모리 도입
-- 기대 효과: 재접속 후 이전 과제/관심 공지/전공 설정/대화 맥락 복원
-- 구현 타당성: 이미 SQLite와 사용자 설정 테이블이 있으므로 같은 저장 계층에 확장 가능
+- “요약 기반 장기기억이 완성됐다”라고 말하면 과장이다. 현재는 대화 원문 저장·복원은 구현, 자동 요약 생성은 미구현이다.
+- “외부 API live 검색이 항상 된다”라고 단정하면 안 된다. API 키와 원격 서버 상태에 의존한다.
+- “MCP 서버”라고 부를 수는 있지만, 현재 코드는 독립 MCP 프로세스보다 LangChain Tool 모듈 구조에 가깝다는 점을 설명할 수 있어야 한다.
+- “TestSprite 테스트 계획이 곧 현재 백엔드 테스트다”라고 말하면 안 된다. TestSprite 산출물은 HTTP endpoint를 가정해 현재 구현과 다르다.
 
 ## 20. 최종 결론
 
-CampusAgent 폴더는 “대학생 전용 로컬 AI 비서”라는 목표에 맞게 UI, 에이전트, 도구, DB, RAG가 비교적 선명하게 나뉘어 있다. 특히 과제/캘린더 CRUD와 공지사항 RAG가 하나의 LangGraph 흐름 안에 묶여 있어 캡스톤 프로젝트로 설명하기 좋은 구조다.
+현재 CampusAgent는 v0.9.0 기준으로 과제·일정·공지 RAG·대학생 정보 검색·장기기억 저장을 갖춘 로컬 학생 비서다. 코드 계층도 `app.py`, `agent/`, `database/`, `mcp_servers/`, `rag/`, `tests/`로 비교적 명확히 나뉘어 있다.
 
-다만 현재 상태에서 가장 먼저 해결해야 할 것은 실행 환경이다. Python/가상환경이 정상 실행되지 않아 앱 실행과 테스트 검증이 막혀 있다. 그다음으로 버전 표기 통일, `mcp_config.json` 도구 목록 보정, 장기기억 영속화, Agent 테스트 추가를 진행하면 프로젝트 완성도가 크게 올라간다.
+가장 좋은 점은 핵심 기능이 실제 테스트로 상당 부분 검증되어 있다는 것이다. 현재 `python -m pytest tests -q` 기준 48개 테스트가 모두 통과한다.
 
-요약하면 현재 코드는 “기능 구현 중심의 8주차 결과물”로 충분히 설득력이 있고, 9주차 이후에는 장기기억과 실행 안정성 보강을 통해 실제 사용 가능한 개인 비서 형태로 발전시키는 것이 가장 자연스럽다.
+가장 중요한 남은 작업은 Agent 테스트 작성, ChromaDB 데이터 경계 정리, `mcp_config.json`과 README 최신화, 자동 요약 메모리 구현, 11주차 서브태스크 기능 구현이다.
+
+요약하면 이 저장소는 “기능 구현 중심의 중간 결과물”을 넘어 “최종 발표용 시스템”으로 발전할 기반이 충분하다. 다음 단계에서는 기능을 더 늘리기 전에 설정·문서·테스트·데이터 경계를 맞추는 작업을 병행해야 한다.

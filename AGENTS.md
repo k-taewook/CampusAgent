@@ -20,6 +20,8 @@ This repository is a Python student assistant application built around these mai
 
 When starting work, identify which of these layers you are changing. Do not treat the app as a single flat script.
 
+Generated, cache, virtualenv, and temporary artifacts such as `__pycache__/`, `.pytest_cache/`, `venv/`, `testsprite_tests/tmp/`, and ad hoc scratch files should not be treated as primary source unless the user explicitly asks about them.
+
 ## 2. Think Before Coding
 
 **Do not guess requirements or failure causes.**
@@ -50,6 +52,8 @@ The following paths contain persistent or semi-persistent runtime state:
 - `campus_tasks.db`
 - `chroma_db_storage/`
 - `.env`
+
+These default paths may be overridden by environment variables such as `SQLITE_DB_PATH` and `CHROMA_DB_DIR`; check the active configuration before assuming where runtime state lives.
 
 Rules:
 - Do not delete, reset, truncate, or clear persistent data unless the user explicitly asks for it.
@@ -102,6 +106,7 @@ This project already has multiple layers. Avoid introducing more indirection unl
 Rules:
 - Put the comment directly under required directives such as a shebang.
 - Skip config files, generated files, and files in areas that clearly do not use header comments.
+- Skip tiny one-off scripts or test files when a header would be noisier than the existing local style.
 - Keep the comment descriptive and short.
 
 ## 9. Verification Workflow
@@ -115,7 +120,9 @@ Default commands for this repository:
 
 Notes:
 - `streamlit run app.py` is a manual UI verification step that starts a long-running local server.
+- Use the Streamlit run check mainly for UI or app-wiring changes, and stop the server after the check is complete.
 - `tests/test_agent.py` is currently an empty placeholder, so it is not meaningful integration coverage by itself.
+- If `pytest` or another verification tool is unavailable, distinguish missing tooling from application failures in the final report.
 
 Prefer targeted tests when the change scope is narrow:
 
