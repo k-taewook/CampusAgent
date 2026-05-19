@@ -15,13 +15,14 @@ from database.db import (
     get_user_setting,
     set_user_setting,
     update_assignment_status,
+    update_subtask_status,
+    get_assignments_with_progress,
     get_or_create_conversation_session,
     load_recent_conversation_messages,
     save_conversation_message,
     get_latest_memory_summary,
 )
 from rag.retriever import init_chromadb, get_notice_count
-import pandas as pd
 from collections import defaultdict
 from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION, is_llm_available, get_llm_provider, get_llm_model
 
@@ -43,6 +44,28 @@ if "db_initialized" not in st.session_state:
     init_sqlite_db()
     get_or_create_conversation_session(CONVERSATION_SESSION_ID, "Streamlit 기본 세션")
     st.session_state.db_initialized = True
+
+
+def _format_chat_error(error: Exception) -> str:
+    """채팅 처리 중 발생한 주요 오류를 사용자에게 친숙한 안내로 변환합니다."""
+    raw_message = str(error)
+    normalized = raw_message.lower()
+
+    temporary_llm_unavailable = (
+        "503" in normalized
+        or "unavailable" in normalized
+        or "high demand" in normalized
+        or "overloaded" in normalized
+    )
+    if temporary_llm_unavailable:
+        return (
+            "⚠️ Gemini 모델이 현재 일시적으로 혼잡해서 요청을 처리하지 못했습니다.\n\n"
+            "잠시 후 같은 요청을 다시 보내주세요. 과제나 일정이 실제로 등록됐는지 애매하면 "
+            "대시보드에서 한 번 확인해주세요."
+        )
+
+    return f"❌ 오류가 발생했습니다: {raw_message}"
+
 
 st.markdown(
     """
@@ -314,7 +337,7 @@ with tab_chat:
                         except Exception:
                             pass
                     except Exception as e:
-                        error_msg = f"❌ 오류가 발생했습니다: {e}"
+                        error_msg = _format_chat_error(e)
                         st.error(error_msg)
                         st.session_state.messages.append(
                             {"role": "assistant", "content": error_msg}
@@ -334,52 +357,76 @@ with tab_dashboard:
     urgent_only = st.toggle("🔥 긴급(High) 과제만 보기", value=False)
     
     try:
-        all_tasks = get_assignments()
+        task_items = get_assignments_with_progress()
         if urgent_only:
-            all_tasks = [t for t in all_tasks if t.priority == 'high']
+            task_items = [item for item in task_items if item.assignment.priority == 'high']
             
-        if not all_tasks:
+        if not task_items:
             st.info("📚 등록된 과제가 없습니다. 챗봇에게 과제를 추가해달라고 말해보세요!")
         else:
-            df_data = []
-            for t in all_tasks:
-                df_data.append({
-                    "ID": t.id,
-                    "완료": t.status == "done",
-                    "상태": t.status,
-                    "제목": t.title,
-                    "과목": t.course_name,
-                    "마감일": t.due_date,
-                    "우선순위": t.priority,
-                })
-            df = pd.DataFrame(df_data)
-            
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "ID": None, # Hide ID
-                    "완료": st.column_config.CheckboxColumn("완료", help="체크 시 즉시 완료 처리됩니다."),
-                    "상태": st.column_config.TextColumn("상태", disabled=True),
-                    "제목": st.column_config.TextColumn("과제 제목", disabled=True),
-                    "과목": st.column_config.TextColumn("과목명", disabled=True),
-                    "마감일": st.column_config.TextColumn("마감일", disabled=True),
-                    "우선순위": st.column_config.TextColumn("우선순위", disabled=True),
-                },
-                disabled=["상태", "제목", "과목", "마감일", "우선순위"],
-                hide_index=True,
-                key="task_editor"
-            )
-            
-            # 변경점 감지하여 DB 업데이트
-            for i, row in edited_df.iterrows():
-                was_done = df.iloc[i]["완료"]
-                is_done = row["완료"]
-                if was_done != is_done:
-                    tid = row["ID"]
-                    new_status = "done" if is_done else "pending"
-                    update_assignment_status(int(tid), new_status)
-                    st.success(f"과제 '{row['제목']}' 상태가 변경되었습니다!")
-                    st.rerun()
+            summary_cols = st.columns(3)
+            total_tasks = len(task_items)
+            done_tasks = sum(1 for item in task_items if item.assignment.status == "done")
+            total_subtasks = sum(item.total_subtasks for item in task_items)
+            summary_cols[0].metric("전체 과제", f"{total_tasks}건")
+            summary_cols[1].metric("완료 과제", f"{done_tasks}건")
+            summary_cols[2].metric("서브태스크", f"{total_subtasks}개")
+
+            for item in task_items:
+                assignment = item.assignment
+                status_label = assignment.status.value if hasattr(assignment.status, "value") else str(assignment.status)
+                progress_label = f"{item.progress}% ({item.done_subtasks}/{item.total_subtasks})" if item.total_subtasks else "서브태스크 없음"
+                expander_label = (
+                    f"[{assignment.id}] {assignment.title} | {assignment.course_name} | "
+                    f"{assignment.due_date} | {progress_label}"
+                )
+
+                with st.expander(expander_label, expanded=item.total_subtasks > 0):
+                    meta_cols = st.columns([2, 2, 1])
+                    meta_cols[0].markdown(f"**과목**: {assignment.course_name}")
+                    meta_cols[1].markdown(f"**마감일**: {assignment.due_date}")
+                    meta_cols[2].markdown(f"**상태**: `{status_label}`")
+                    st.progress(item.progress / 100 if item.total_subtasks else (1.0 if status_label == "done" else 0.0))
+
+                    if assignment.description:
+                        st.caption(assignment.description)
+
+                    if item.subtasks:
+                        st.markdown("#### 서브태스크")
+                        for subtask in item.subtasks:
+                            subtask_done = subtask.status == "done"
+                            checkbox_label = (
+                                f"[{subtask.id}] {subtask.title}"
+                                f"{f' · {subtask.due_date}' if subtask.due_date else ''}"
+                            )
+                            checked = st.checkbox(
+                                checkbox_label,
+                                value=subtask_done,
+                                key=f"subtask_done_{subtask.id}",
+                            )
+                            if checked != subtask_done:
+                                update_subtask_status(
+                                    subtask.id,
+                                    "done" if checked else "pending",
+                                )
+                                st.success(f"서브태스크 '{subtask.title}' 상태가 변경되었습니다.")
+                                st.rerun()
+                            if subtask.description:
+                                st.caption(subtask.description)
+                    else:
+                        done = status_label == "done"
+                        checked = st.checkbox(
+                            "일반 과제 완료",
+                            value=done,
+                            key=f"assignment_done_{assignment.id}",
+                        )
+                        if checked != done:
+                            update_assignment_status(
+                                assignment.id,
+                                "done" if checked else "pending",
+                            )
+                            st.success(f"과제 '{assignment.title}' 상태가 변경되었습니다.")
+                            st.rerun()
     except Exception as e:
         st.error(f"대시보드 로딩 실패: {e}")
 

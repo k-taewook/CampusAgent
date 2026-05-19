@@ -71,6 +71,73 @@ class Assignment(BaseModel):
         )
 
 
+class SubtaskCreate(BaseModel):
+    """서브태스크 생성 요청 모델"""
+    assignment_id: int = Field(..., description="부모 과제 ID")
+    title: str = Field(..., description="서브태스크 제목")
+    description: Optional[str] = Field(None, description="서브태스크 상세 설명")
+    due_date: Optional[str] = Field(None, description="마감일 (YYYY-MM-DD 또는 YYYY-MM-DD HH:MM)")
+    status: str = Field("pending", description="상태 (pending/in_progress/done)")
+    sort_order: int = Field(0, description="표시 순서")
+
+    @field_validator('title')
+    @classmethod
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('title is required and cannot be empty')
+        return v.strip()
+
+    @field_validator('due_date')
+    @classmethod
+    def validate_due_date(cls, v):
+        if v is None or not str(v).strip():
+            return None
+        value = str(v).strip()
+        if not re.match(r'^\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?$', value):
+            raise ValueError('due_date must be in absolute YYYY-MM-DD or YYYY-MM-DD HH:MM format')
+        return value
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        valid = {AssignmentStatus.PENDING.value, AssignmentStatus.IN_PROGRESS.value, AssignmentStatus.DONE.value}
+        if v not in valid:
+            raise ValueError(f'status must be one of {valid}')
+        return v
+
+
+class Subtask(BaseModel):
+    """서브태스크 전체 모델 (DB 조회 결과)"""
+    id: int
+    assignment_id: int
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+    status: AssignmentStatus = AssignmentStatus.PENDING
+    sort_order: int = 0
+    created_at: Optional[str] = None
+
+    def to_display_string(self) -> str:
+        """채팅 응답용 문자열 변환"""
+        status_emoji = {
+            "pending": "📋",
+            "in_progress": "🔄",
+            "done": "✅",
+        }
+        emoji = status_emoji.get(self.status.value, "📋")
+        due = f" | 마감: {self.due_date}" if self.due_date else ""
+        return f"{emoji} [{self.id}] {self.title}{due} ({self.status.value})"
+
+
+class AssignmentWithProgress(BaseModel):
+    """부모 과제, 서브태스크, 진행률을 함께 표현하는 모델"""
+    assignment: Assignment
+    subtasks: list[Subtask] = Field(default_factory=list)
+    progress: int = 0
+    total_subtasks: int = 0
+    done_subtasks: int = 0
+
+
 class UserSetting(BaseModel):
     """사용자 설정 모델"""
     key: str

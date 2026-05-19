@@ -11,13 +11,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from database.db import (
     init_sqlite_db,
     add_assignment,
+    add_subtask,
+    add_subtasks,
     get_assignments,
     get_assignment_by_id,
+    get_assignment_progress,
+    get_assignments_with_progress,
+    get_subtasks,
     update_assignment_status,
+    update_subtask_status,
     delete_assignment,
+    delete_subtask,
     get_upcoming_assignments,
 )
-from database.models import AssignmentCreate, AssignmentStatus
+from database.models import AssignmentCreate, AssignmentStatus, SubtaskCreate
+from mcp_servers.task_server import _generate_subtask_plan
 import config.settings as settings
 
 
@@ -163,3 +171,145 @@ class TestGetById:
     def test_not_found(self):
         found = get_assignment_by_id(9999)
         assert found is None
+
+
+class TestSubtasks:
+    def _add_parent(self):
+        data = AssignmentCreate(
+            title="캡스톤 디자인 발표",
+            course_name="캡스톤디자인",
+            due_date="2026-05-20",
+        )
+        return add_assignment(data)
+
+    def test_add_subtask(self):
+        parent = self._add_parent()
+        subtask = add_subtask(
+            SubtaskCreate(
+                assignment_id=parent.id,
+                title="발표 요구사항 확인",
+                due_date="2026-05-15",
+            )
+        )
+
+        assert subtask.id == 1
+        assert subtask.assignment_id == parent.id
+        assert subtask.status == AssignmentStatus.PENDING
+
+    def test_add_multiple_subtasks_ordered(self):
+        parent = self._add_parent()
+        add_subtasks(
+            parent.id,
+            [
+                SubtaskCreate(assignment_id=parent.id, title="세 번째", sort_order=3),
+                SubtaskCreate(assignment_id=parent.id, title="첫 번째", sort_order=1),
+                SubtaskCreate(assignment_id=parent.id, title="두 번째", sort_order=2),
+            ],
+        )
+
+        subtasks = get_subtasks(parent.id)
+        assert [s.title for s in subtasks] == ["첫 번째", "두 번째", "세 번째"]
+
+    def test_progress_empty_subtasks(self):
+        parent = self._add_parent()
+
+        progress = get_assignment_progress(parent.id)
+
+        assert progress["total"] == 0
+        assert progress["done"] == 0
+        assert progress["progress"] == 0
+
+    def test_progress_partial_done(self):
+        parent = self._add_parent()
+        subtasks = add_subtasks(
+            parent.id,
+            [
+                SubtaskCreate(assignment_id=parent.id, title="자료 조사", sort_order=1),
+                SubtaskCreate(assignment_id=parent.id, title="PPT 작성", sort_order=2),
+                SubtaskCreate(assignment_id=parent.id, title="리허설", sort_order=3),
+            ],
+        )
+
+        update_subtask_status(subtasks[0].id, "done")
+        progress = get_assignment_progress(parent.id)
+        updated_parent = get_assignment_by_id(parent.id)
+
+        assert progress["done"] == 1
+        assert progress["total"] == 3
+        assert progress["progress"] == 33
+        assert updated_parent.status == AssignmentStatus.IN_PROGRESS
+
+    def test_progress_all_done_updates_parent(self):
+        parent = self._add_parent()
+        subtasks = add_subtasks(
+            parent.id,
+            [
+                SubtaskCreate(assignment_id=parent.id, title="자료 조사", sort_order=1),
+                SubtaskCreate(assignment_id=parent.id, title="PPT 작성", sort_order=2),
+            ],
+        )
+
+        for subtask in subtasks:
+            update_subtask_status(subtask.id, "done")
+
+        updated_parent = get_assignment_by_id(parent.id)
+        progress = get_assignment_progress(parent.id)
+
+        assert progress["progress"] == 100
+        assert updated_parent.status == AssignmentStatus.DONE
+
+    def test_delete_parent_removes_subtasks(self):
+        parent = self._add_parent()
+        add_subtask(SubtaskCreate(assignment_id=parent.id, title="자료 조사"))
+
+        assert delete_assignment(parent.id) is True
+
+        assert get_assignment_by_id(parent.id) is None
+        assert get_subtasks(parent.id) == []
+
+    def test_delete_subtask_resyncs_parent(self):
+        parent = self._add_parent()
+        subtasks = add_subtasks(
+            parent.id,
+            [
+                SubtaskCreate(assignment_id=parent.id, title="자료 조사", sort_order=1),
+                SubtaskCreate(assignment_id=parent.id, title="PPT 작성", sort_order=2),
+            ],
+        )
+        update_subtask_status(subtasks[0].id, "done")
+
+        assert delete_subtask(subtasks[0].id) is True
+
+        progress = get_assignment_progress(parent.id)
+        updated_parent = get_assignment_by_id(parent.id)
+        assert progress["done"] == 0
+        assert progress["total"] == 1
+        assert updated_parent.status == AssignmentStatus.PENDING
+
+    def test_subtask_invalid_status_rejected(self):
+        parent = self._add_parent()
+        subtask = add_subtask(SubtaskCreate(assignment_id=parent.id, title="자료 조사"))
+
+        with pytest.raises(ValueError):
+            update_subtask_status(subtask.id, "invalid")
+
+    def test_get_assignments_with_progress(self):
+        parent = self._add_parent()
+        add_subtask(SubtaskCreate(assignment_id=parent.id, title="자료 조사"))
+
+        items = get_assignments_with_progress()
+
+        assert len(items) == 1
+        assert items[0].assignment.id == parent.id
+        assert items[0].total_subtasks == 1
+
+    def test_generate_subtask_plan_count(self):
+        plan = _generate_subtask_plan(
+            "캡스톤 디자인 발표",
+            "PPT 발표 준비",
+            "2026-05-20",
+        )
+
+        assert 5 <= len(plan) <= 7
+        assert all(item["title"] for item in plan)
+        assert all(item["due_date"] for item in plan)
