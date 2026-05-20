@@ -3,6 +3,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from typing import Optional
+from urllib.parse import quote_plus
 
 import requests
 from bs4 import BeautifulSoup
@@ -23,84 +24,81 @@ KSTARTUP_BASE = "https://www.k-startup.go.kr"
 
 
 # ──────────────────────────────────────────────────
-# 1. 어디가(adiga.kr) — 편입학 정보
+# 1. 대학 편입학 정보
 # ──────────────────────────────────────────────────
 
-# 편입학 정보를 직접 제공하는 어디가 페이지
-ADIGA_TRANSFER_SEARCH_URL = f"{ADIGA_BASE}/iphak/transfer/pcweb/PCUIPOKR000011100.do"
-ADIGA_TRANSFER_LIST_URL = f"{ADIGA_BASE}/iphak/common/pcweb/PCUIPOKR000022100.do"
+ADIGA_ADMISSION_INFO_URL = (
+    f"{ADIGA_BASE}/ucp/prc/uni/admssUnivView.do?menuId=PCPRCINF2000"
+)
+
+KNOWN_UNIVERSITY_ADMISSION_URLS = {
+    "인하대": ("인하대학교", "https://admission.inha.ac.kr"),
+    "인하대학교": ("인하대학교", "https://admission.inha.ac.kr"),
+    "인하공전": ("인하공업전문대학", "https://www.inhatc.ac.kr/ipsi"),
+    "인하공업전문대학": ("인하공업전문대학", "https://www.inhatc.ac.kr/ipsi"),
+}
+
+
+def _known_admission_site(school_name: str) -> tuple[str, str]:
+    """학교명 별칭을 공식 입학처 URL로 변환합니다."""
+    normalized = school_name.replace(" ", "")
+    for alias, info in KNOWN_UNIVERSITY_ADMISSION_URLS.items():
+        if alias.replace(" ", "") in normalized or normalized in alias.replace(" ", ""):
+            return info
+    return school_name, ""
 
 
 def crawl_transfer_by_school(school_name: str, max_results: int = 5) -> list[dict]:
     """
-    어디가(adiga.kr) 편입학 검색 페이지에서 특정 학교의 편입학 정보를 크롤링합니다.
-    학교명으로 검색하여 모집요강 목록을 반환합니다.
+    특정 학교의 편입학 확인 경로를 반환합니다.
 
-    robots.txt 상 비관리자 페이지는 허용되므로 법적으로 안전합니다.
+    현재 어디가 공개 메뉴는 수시/정시 전형정보 중심이라 편입학 전용 목록을
+    안정적으로 제공하지 않습니다. 편입학은 대학별 입학처 공식 페이지 확인을
+    우선 안내하고, 어디가의 일반 전형정보 페이지는 보조 확인 경로로 제공합니다.
     """
-    session = requests.Session()
-    session.headers.update(DEFAULT_HEADERS)
-
-    # 어디가 편입학 검색: searchKeyword 파라미터 시도
     results = []
-    tried_urls = [
-        (ADIGA_TRANSFER_SEARCH_URL, {"searchKeyword": school_name, "pageIndex": 1}),
-        (ADIGA_TRANSFER_LIST_URL, {"searchUnivNm": school_name, "pageIndex": 1}),
-    ]
 
-    for url, params in tried_urls:
-        try:
-            resp = session.get(url, params=params, timeout=15)
-            if resp.status_code != 200:
-                continue
-            soup = BeautifulSoup(resp.text, "html.parser")
-            # 어디가 편입학 목록: table 또는 ul.result-list 구조
-            rows = soup.select("table.tbl-basic tbody tr, ul.result-list li, div.info-list .item")
-            for row in rows[:max_results]:
-                title_tag = row.select_one("td.tit a, .tit a, strong, a")
-                if not title_tag:
-                    continue
-                title = title_tag.get_text(strip=True)
-                if not title or len(title) < 2:
-                    continue
-                href = title_tag.get("href", "")
-                full_url = href if href.startswith("http") else (ADIGA_BASE + href if href else url)
-                # 날짜/기간 추출 시도
-                date_text = ""
-                for td in row.select("td, span"):
-                    t = td.get_text(strip=True)
-                    if re.match(r"\d{4}[-./]", t):
-                        date_text = t
-                        break
-                results.append({
-                    "title": title,
-                    "content": f"{school_name} 편입학 모집요강. 상세 내용은 출처 URL에서 확인하세요.",
-                    "date": date_text,
-                    "url": full_url,
-                    "source": "어디가(adiga.kr) 편입학 정보",
-                    "category": "transfer",
-                })
-            if results:
-                break
-        except requests.RequestException:
-            continue
-        time.sleep(REQUEST_DELAY)
-
-    # 어디가에서 결과가 없으면 학교 직접 안내 항목 반환
-    if not results:
+    official_name, admission_url = _known_admission_site(school_name)
+    if admission_url:
         results.append({
-            "title": f"{school_name} 편입학 정보",
+            "title": f"{official_name} 입학처 편입학 확인",
             "content": (
-                f"{school_name}의 편입학 모집요강은 해당 학교 입학처 홈페이지 또는 "
-                "어디가(adiga.kr)에서 직접 확인하세요."
+                f"{official_name} 편입학 모집요강은 대학 입학처 공식 홈페이지에서 "
+                "최신 공지와 PDF 모집요강을 확인하는 것이 가장 정확합니다. "
+                "현재 어디가 공개 메뉴에서는 편입학 전용 목록을 확인하지 못했습니다."
             ),
             "date": "",
-            "url": f"https://www.adiga.kr/iphak/transfer/main.do",
-            "source": "어디가(adiga.kr)",
+            "url": admission_url,
+            "source": f"{official_name} 입학처",
             "category": "transfer",
         })
 
-    return results
+    query = quote_plus(f"{school_name} 편입학 모집요강 입학처")
+    results.append({
+        "title": f"{school_name} 어디가 전형정보 확인",
+        "content": (
+            "어디가(adiga.kr)는 현재 공개 메뉴 기준으로 수시/정시 전형정보와 "
+            "대학별 입시정보를 제공합니다. 편입학 모집요강은 대학 입학처 "
+            f"또는 검색어 '{school_name} 편입학 모집요강 입학처'로 재확인하세요."
+        ),
+        "date": "",
+        "url": ADIGA_ADMISSION_INFO_URL,
+        "source": "어디가(adiga.kr) 전형정보",
+        "category": "transfer",
+    })
+    results.append({
+        "title": f"{school_name} 편입학 공식 모집요강 검색어",
+        "content": (
+            "학교별 편입학 일정과 지원 자격은 매년 바뀌므로 대학 입학처의 "
+            "최신 모집요강 원문을 우선 확인해야 합니다."
+        ),
+        "date": "",
+        "url": f"https://www.google.com/search?q={query}",
+        "source": "공식 입학처 검색 안내",
+        "category": "transfer",
+    })
+
+    return results[:max_results]
 
 
 # ──────────────────────────────────────────────────

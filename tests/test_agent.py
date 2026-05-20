@@ -14,12 +14,14 @@ def test_task_decomposition_tools_are_bound():
     assert "list_task_tree" in tool_names
     assert "update_subtask_status_tool" in tool_names
     assert "get_task_progress" in tool_names
+    assert "search_personalized_student_info" in tool_names
 
 
 def test_prompt_mentions_subtask_tools():
     assert "add_task_with_subtasks" in SYSTEM_PROMPT_TEMPLATE
     assert "update_subtask_status_tool" in SYSTEM_PROMPT_TEMPLATE
     assert "get_task_progress" in SYSTEM_PROMPT_TEMPLATE
+    assert "search_personalized_student_info" in SYSTEM_PROMPT_TEMPLATE
 
 
 def test_graph_fallback_without_llm(monkeypatch):
@@ -33,6 +35,7 @@ def test_graph_fallback_without_llm(monkeypatch):
                 "current_time": "2026-05-19 12:00:00",
                 "user_major": "컴퓨터시스템공학과",
                 "user_grade": "2학년",
+                "user_profile": "관심 영역: policy,contest\n희망 진로: 백엔드 개발자",
                 "memory_summary": "테스트 요약",
             },
         },

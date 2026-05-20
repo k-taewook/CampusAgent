@@ -30,6 +30,13 @@ STUDENT_INFO_KEYWORDS = {
     "contest": ["공모전", "현장실습", "인턴십"],
 }
 
+PERSONALIZED_INTEREST_ALIASES = {
+    "transfer": "편입학/전공심화",
+    "policy": "장학금/청년정책",
+    "contest": "공모전/대외활동",
+    "intern": "현장실습/인턴십",
+}
+
 # 실시간 크롤링 결과를 단기 캐싱하여 같은 쿼리 반복 시 서버 부담 완화 (TTL 5분)
 _LIVE_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _LIVE_CACHE_TTL = 300.0
@@ -108,6 +115,71 @@ def _format_result_item(index: int, result: dict) -> str:
         f"   📝 요약: {summary}\n"
         + (f"   🔗 {url}" if url else "")
     )
+
+
+def _normalize_interests(interests: str) -> list[str]:
+    """설정 문자열을 개인화 관심 영역 키 목록으로 정리합니다."""
+    if not interests:
+        return ["policy", "contest", "intern"]
+
+    tokens = [
+        token.strip().lower()
+        for token in interests.replace("/", ",").replace("|", ",").split(",")
+        if token.strip()
+    ]
+    selected: list[str] = []
+    for token in tokens:
+        if token in PERSONALIZED_INTEREST_ALIASES:
+            selected.append(token)
+            continue
+        if any(keyword in token for keyword in ["편입", "전공심화", "transfer"]):
+            selected.append("transfer")
+        elif any(keyword in token for keyword in ["장학", "정책", "국가", "policy"]):
+            selected.append("policy")
+        elif any(keyword in token for keyword in ["공모", "대외", "contest"]):
+            selected.append("contest")
+        elif any(keyword in token for keyword in ["인턴", "현장실습", "취업", "intern", "job"]):
+            selected.append("intern")
+
+    deduped = []
+    for item in selected:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped or ["policy", "contest", "intern"]
+
+
+def _build_personalized_queries(
+    major: str = "",
+    grade: str = "",
+    interests: str = "",
+    preferred_school: str = "",
+    career_goal: str = "",
+) -> list[dict]:
+    """사용자 프로필을 기반으로 검색할 대학 정보 쿼리를 생성합니다."""
+    major_text = major.strip() or "전공 미설정"
+    grade_text = grade.strip() or "학년 미설정"
+    school_text = preferred_school.strip()
+    career_text = career_goal.strip()
+    interest_keys = _normalize_interests(interests)
+
+    query_context = " ".join(
+        part for part in [major_text, grade_text, career_text] if part and "미설정" not in part
+    )
+    queries: list[dict] = []
+    for key in interest_keys:
+        if key == "transfer":
+            query = f"{school_text or major_text} 편입학 전공심화 모집요강 {grade_text}".strip()
+            queries.append({"category": "transfer", "query": query, "label": PERSONALIZED_INTEREST_ALIASES[key]})
+        elif key == "policy":
+            query = f"{query_context} 국가장학금 장학금 청년정책".strip()
+            queries.append({"category": "policy", "query": query, "label": PERSONALIZED_INTEREST_ALIASES[key]})
+        elif key == "contest":
+            query = f"{query_context} 공모전 대외활동".strip()
+            queries.append({"category": "contest", "query": query, "label": PERSONALIZED_INTEREST_ALIASES[key]})
+        elif key == "intern":
+            query = f"{query_context} 현장실습 인턴십 취업".strip()
+            queries.append({"category": "contest", "query": query, "label": PERSONALIZED_INTEREST_ALIASES[key]})
+    return queries
 
 
 @tool
@@ -244,6 +316,105 @@ def get_student_info_stats() -> str:
         return "\n".join(lines)
     except Exception as e:
         return f"❌ 대학생 정보 상태 조회 실패: {e}"
+
+
+@tool
+def search_personalized_student_info(
+    major: str = "",
+    grade: str = "",
+    interests: str = "",
+    preferred_school: str = "",
+    career_goal: str = "",
+    n_results: int = 5,
+) -> str:
+    """
+    설정 탭에 저장된 개인정보를 바탕으로 맞춤형 대학생 정보를 추천합니다.
+    사용자가 "내 정보에 맞는 정보", "나한테 맞는 장학금/공모전/편입 정보"처럼
+    개인화 추천을 요청하면 사용하세요.
+
+    Args:
+        major: 사용자 전공
+        grade: 사용자 학년
+        interests: 관심 영역. transfer, policy, contest, intern 또는 한글 설명을 쉼표로 구분
+        preferred_school: 관심 학교/희망 편입 학교
+        career_goal: 희망 진로/관심 직무
+        n_results: 전체 반환 최대 결과 수
+
+    Returns:
+        개인화 추천 결과 문자열
+    """
+    try:
+        queries = _build_personalized_queries(
+            major=major,
+            grade=grade,
+            interests=interests,
+            preferred_school=preferred_school,
+            career_goal=career_goal,
+        )
+        per_query = max(2, min(5, n_results))
+        merged_results = []
+        seen_titles: set[str] = set()
+
+        for plan in queries:
+            for result in search_notices(
+                query=plan["query"],
+                n_results=per_query,
+                category=plan["category"],
+            ):
+                title = result.get("title", "")
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+                result["_personalized_label"] = plan["label"]
+                merged_results.append(result)
+
+        merged_results.sort(key=lambda item: item.get("relevance", 0), reverse=True)
+        display = merged_results[:n_results]
+        interest_labels = ", ".join(plan["label"] for plan in queries)
+        profile_lines = [
+            f"- 전공: {major or '미설정'}",
+            f"- 학년: {grade or '미설정'}",
+            f"- 관심 영역: {interest_labels}",
+        ]
+        if preferred_school:
+            profile_lines.append(f"- 관심 학교: {preferred_school}")
+        if career_goal:
+            profile_lines.append(f"- 희망 진로: {career_goal}")
+
+        header = (
+            "🎯 **개인화 대학 정보 추천**\n"
+            + "\n".join(profile_lines)
+            + f"\n{'─' * 40}\n\n"
+        )
+
+        if not display:
+            fallback_queries = "\n".join(
+                f"- {plan['label']}: `{plan['query']}`"
+                for plan in queries
+            )
+            return (
+                header
+                + "아직 저장된 대학생 정보 데이터에서 맞춤 결과를 찾지 못했습니다.\n\n"
+                + "💡 **다음 추천 행동**\n"
+                + "- `load_student_info_data`로 샘플 데이터를 먼저 로드해보세요.\n"
+                + "- 최신 정보가 필요하면 '내 정보에 맞는 최신 정보 찾아줘'라고 요청해 실시간 검색을 시도하세요.\n"
+                + "- 생성된 개인화 검색어는 다음과 같습니다.\n"
+                + fallback_queries
+            )
+
+        items = []
+        for index, result in enumerate(display, 1):
+            label = result.get("_personalized_label", "맞춤 정보")
+            items.append(f"🏷️ 추천 이유: {label}\n" + _format_result_item(index, result))
+
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 마음에 드는 항목의 마감일은 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 조건이 중요한 정보는 반드시 공식 출처에서 지원 자격을 다시 확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ 개인화 대학 정보 추천 실패: {e}"
 
 
 def _crawl_student_info_live(
@@ -476,7 +647,7 @@ def _format_external_items(results: list[dict], n_results: int) -> list[str]:
 @tool
 def search_transfer_by_school(school_name: str, n_results: int = 5) -> str:
     """
-    특정 학교의 편입학 모집요강 정보를 어디가(adiga.kr)에서 검색합니다.
+    특정 학교의 편입학 모집요강 확인 경로를 검색합니다.
     사용자가 "○○대 편입학 정보 찾아줘", "○○대 모집요강" 같이 학교명을 직접 언급하면 사용하세요.
 
     Args:
@@ -492,19 +663,19 @@ def search_transfer_by_school(school_name: str, n_results: int = 5) -> str:
         if not results:
             return (
                 f"🔍 '{school_name}' 편입학 정보를 찾지 못했습니다.\n\n"
-                f"어디가(https://www.adiga.kr)에서 직접 검색해보세요."
+                "해당 학교 입학처 홈페이지에서 직접 검색해보세요."
             )
         _store_external_results(results, "transfer")
         items = _format_external_items(results, n_results)
         header = (
-            f"🎓 **'{school_name}' 편입학 정보** (어디가 기준)\n"
+            f"🎓 **'{school_name}' 편입학 정보 확인 경로**\n"
             f"   수집 {len(results)}건\n"
             f"{'─' * 40}\n\n"
         )
         footer = (
             "\n\n💡 **다음 추천 행동**\n"
             "- 지원 마감일을 캘린더나 과제로 등록할 수 있습니다.\n"
-            "- 정확한 지원 조건은 반드시 학교 입학처 공식 사이트에서 재확인하세요."
+            "- 편입학 모집요강은 어디가보다 학교 입학처 공식 사이트 원문을 우선 확인하세요."
         )
         return header + "\n\n".join(items) + footer
     except Exception as e:
@@ -653,6 +824,7 @@ def search_contest_external(query: str, n_results: int = 5) -> str:
 
 STUDENT_INFO_TOOLS = [
     search_student_info,
+    search_personalized_student_info,
     search_student_info_live,
     search_transfer_by_school,
     search_scholarship_policy,

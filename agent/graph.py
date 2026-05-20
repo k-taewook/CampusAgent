@@ -81,16 +81,19 @@ def build_graph():
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             user_major = "미설정"
             user_grade = "미설정"
+            user_profile = "추가 개인화 설정 없음"
         else:
             current_time = context_data.get("current_time", "알 수 없음")
             user_major = context_data.get("user_major", "미설정")
             user_grade = context_data.get("user_grade", "미설정")
+            user_profile = context_data.get("user_profile", "추가 개인화 설정 없음")
         memory_summary = context_data.get("memory_summary", "저장된 장기기억 요약 없음")
             
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             current_time=current_time,
             user_major=user_major,
             user_grade=user_grade,
+            user_profile=user_profile,
             memory_summary=memory_summary,
         )
         system_message = SystemMessage(content=system_prompt)

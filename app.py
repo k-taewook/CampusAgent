@@ -67,6 +67,24 @@ def _format_chat_error(error: Exception) -> str:
     return f"❌ 오류가 발생했습니다: {raw_message}"
 
 
+def _build_user_profile_context() -> str:
+    """설정 탭의 개인화 정보를 Agent 컨텍스트용 문자열로 정리합니다."""
+    profile = {
+        "학교": get_user_setting("school_name", ""),
+        "전공": get_user_setting("major", "미설정"),
+        "학년": get_user_setting("grade", "미설정"),
+        "관심 영역": get_user_setting("info_interests", ""),
+        "관심 학교": get_user_setting("preferred_school", ""),
+        "희망 진로": get_user_setting("career_goal", ""),
+    }
+    lines = [
+        f"{key}: {value}"
+        for key, value in profile.items()
+        if value and value != "미설정"
+    ]
+    return "\n".join(lines) if lines else "추가 개인화 설정 없음"
+
+
 st.markdown(
     """
     <style>
@@ -262,6 +280,7 @@ with tab_chat:
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_major_ctx = get_user_setting("major", "미설정")
         user_grade_ctx = get_user_setting("grade", "미설정")
+        user_profile_ctx = _build_user_profile_context()
         memory_summary_ctx = get_latest_memory_summary(CONVERSATION_SESSION_ID) or "저장된 장기기억 요약 없음"
         config = {"configurable": {"thread_id": "streamlit_session"}}
 
@@ -288,6 +307,7 @@ with tab_chat:
                                     "current_time": current_time_str,
                                     "user_major": user_major_ctx,
                                     "user_grade": user_grade_ctx,
+                                    "user_profile": user_profile_ctx,
                                     "memory_summary": memory_summary_ctx
                                 }
                             }, 
@@ -647,6 +667,9 @@ with tab_settings:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("#### 👤 개인 정보")
+        current_school = get_user_setting("school_name", "인하공업전문대학")
+        school_name = st.text_input("🏫 학교", value=current_school)
+
         current_major = get_user_setting("major", "")
         major = st.text_input("🎓 전공 (예: 소프트웨어공학과)", value=current_major)
         
@@ -654,9 +677,36 @@ with tab_settings:
         grade_options = ["1학년", "2학년", "3학년", "4학년", "5학년 이상", "기타"]
         grade_idx = grade_options.index(current_grade) if current_grade in grade_options else 0
         grade = st.selectbox("📚 학년", grade_options, index=grade_idx)
+
+        current_career = get_user_setting("career_goal", "")
+        career_goal = st.text_input("💼 희망 진로/관심 직무", value=current_career, placeholder="예: 백엔드 개발자, AI 개발, 편입 준비")
         
     with col2:
         st.markdown("#### 🔔 개인화 조건")
+        interest_options = {
+            "장학금/청년정책": "policy",
+            "공모전/대외활동": "contest",
+            "현장실습/인턴십": "intern",
+            "편입학/전공심화": "transfer",
+        }
+        current_interests = [
+            item.strip()
+            for item in get_user_setting("info_interests", "policy,contest,intern").split(",")
+            if item.strip()
+        ]
+        selected_interest_labels = [
+            label for label, value in interest_options.items()
+            if value in current_interests
+        ]
+        info_interests = st.multiselect(
+            "🌐 맞춤 추천 관심 영역",
+            list(interest_options.keys()),
+            default=selected_interest_labels or ["장학금/청년정책", "공모전/대외활동"],
+        )
+
+        current_preferred_school = get_user_setting("preferred_school", "")
+        preferred_school = st.text_input("🎯 관심 학교/편입 희망 학교", value=current_preferred_school, placeholder="예: 인하대, 연세대")
+
         current_notify = int(get_user_setting("notify_days", "3"))
         notify_days = st.number_input("⏰ 마감(D-Day) 알림 기준일", min_value=1, max_value=14, value=current_notify)
         
@@ -666,8 +716,23 @@ with tab_settings:
         llm_pref = st.selectbox("🤖 선호 LLM 엔진", llm_options, index=llm_idx, disabled=True, help="기존 .env 로직에 의해 자동감지 중입니다.")
         
     if st.button("💾 설정 저장", type="primary", use_container_width=True):
+        interest_values = [
+            interest_options[label]
+            for label in info_interests
+            if label in interest_options
+        ]
+        set_user_setting("school_name", school_name)
         set_user_setting("major", major)
         set_user_setting("grade", grade)
+        set_user_setting("career_goal", career_goal)
+        set_user_setting("preferred_school", preferred_school)
+        set_user_setting("info_interests", ",".join(interest_values))
         set_user_setting("notify_days", str(notify_days))
         set_user_setting("llm_pref", llm_pref)
         st.success("설정이 성공적으로 저장되었습니다! 다음 챗봇 대화부터 즉시 반영됩니다.")
+
+    with st.expander("🎯 현재 개인화 프로필 미리보기", expanded=False):
+        st.code(_build_user_profile_context(), language="text")
+        if st.button("내 정보에 맞는 대학 정보 추천받기", use_container_width=True):
+            st.session_state.quick_prompt = "내 설정 정보를 바탕으로 나에게 맞는 대학 정보 추천해줘."
+            st.rerun()

@@ -12,8 +12,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import config.settings as settings
 from mcp_servers.student_info_server import (
     STUDENT_INFO_KEYWORDS,
+    _build_personalized_queries,
     _load_student_info_from_json,
     load_student_info_data,
+    search_personalized_student_info,
     search_student_info,
     search_student_info_live,
     search_transfer_by_school,
@@ -91,6 +93,39 @@ def test_student_info_keywords_defined():
         assert kws and all(isinstance(k, str) and k for k in kws)
 
 
+def test_build_personalized_queries():
+    queries = _build_personalized_queries(
+        major="컴퓨터시스템공학과",
+        grade="2학년",
+        interests="policy,contest,intern",
+        preferred_school="인하대",
+        career_goal="백엔드 개발자",
+    )
+
+    labels = {q["label"] for q in queries}
+    assert "장학금/청년정책" in labels
+    assert "공모전/대외활동" in labels
+    assert "현장실습/인턴십" in labels
+    assert any("컴퓨터시스템공학과" in q["query"] for q in queries)
+
+
+def test_personalized_student_info_search():
+    load_student_info_data.invoke({"filepath": _sample_path()})
+
+    result = search_personalized_student_info.invoke({
+        "major": "컴퓨터시스템공학과",
+        "grade": "2학년",
+        "interests": "policy,contest",
+        "preferred_school": "",
+        "career_goal": "소프트웨어 개발자",
+        "n_results": 4,
+    })
+
+    assert "개인화 대학 정보 추천" in result
+    assert "컴퓨터시스템공학과" in result
+    assert "추천 이유" in result or "맞춤 결과를 찾지 못했습니다" in result
+
+
 def test_search_student_info_live_with_mocked_crawler(monkeypatch):
     """실시간 크롤러를 가짜로 대체하여 도구 흐름 검증 (네트워크 미사용)."""
     fake_payloads = {
@@ -154,8 +189,8 @@ def test_search_transfer_by_school_with_mock(monkeypatch):
             "title": "연세대학교 2026 편입학 모집요강",
             "content": "연세대학교 편입학 안내. 모집학과 및 지원 서류 확인 필요.",
             "date": "2026-09-30",
-            "url": "https://www.adiga.kr/iphak/transfer/main.do",
-            "source": "어디가(adiga.kr) 편입학 정보",
+            "url": "https://admission.yonsei.ac.kr",
+            "source": "연세대학교 입학처",
             "category": "transfer",
         }
     ]
@@ -165,7 +200,18 @@ def test_search_transfer_by_school_with_mock(monkeypatch):
     result = search_transfer_by_school.invoke({"school_name": "연세대", "n_results": 3})
     assert "연세대" in result
     assert "편입학" in result
-    assert "어디가" in result
+    assert "입학처" in result
+
+
+def test_transfer_fallback_does_not_return_removed_adiga_url():
+    """편입학 안내가 삭제된 어디가 예전 경로를 반환하지 않는지 검증."""
+    from rag.external_crawler import crawl_transfer_by_school
+
+    results = crawl_transfer_by_school("인하대", max_results=3)
+    joined = "\n".join(item["url"] for item in results)
+
+    assert "https://admission.inha.ac.kr" in joined
+    assert "/iphak/transfer/main.do" not in joined
 
 
 def test_search_scholarship_policy_no_api_key(monkeypatch):

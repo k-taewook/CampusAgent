@@ -46,6 +46,12 @@
       "module": "mcp_servers.student_info_server",
       "tools": [
         "search_student_info",
+        "search_personalized_student_info",
+        "search_student_info_live",
+        "search_transfer_by_school",
+        "search_scholarship_policy",
+        "search_job_intern",
+        "search_contest_external",
         "load_student_info_data",
         "get_student_info_stats"
       ],
