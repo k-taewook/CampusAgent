@@ -74,6 +74,10 @@ def search_notices(
                 "url": metadata.get("url", ""),
                 "deadline": metadata.get("deadline", ""),
                 "target": metadata.get("target", ""),
+                "source_type": metadata.get("source_type", ""),
+                "provider": metadata.get("provider", ""),
+                "eligibility_checked": metadata.get("eligibility_checked", ""),
+                "query_context": metadata.get("query_context", ""),
                 "distance": round(distance, 4),
                 "relevance": round(1 - distance, 4),  # 코사인 유사도
             })

@@ -224,6 +224,98 @@ def test_search_scholarship_policy_no_api_key(monkeypatch):
     assert "YOUTH_CENTER_API_KEY" in result
 
 
+def test_search_scholarship_policy_asks_for_missing_context(monkeypatch):
+    """개인화 정책 추천에 필요한 조건이 부족하면 바로 검색하지 않고 질문한다."""
+    import config.settings as cfg
+    monkeypatch.setattr(cfg, "YOUTH_CENTER_API_KEY", "dummy-key")
+
+    result = search_scholarship_policy.invoke({
+        "query": "내가 받을 수 있는 청년 정책 찾아줘",
+        "n_results": 3,
+    })
+
+    assert "추가 조건이 필요합니다" in result
+    assert "거주 지역" in result
+    assert "나이" in result
+    assert "재학 상태" in result
+    assert "취업 상태" in result
+
+
+def test_search_scholarship_policy_reranks_with_user_context(monkeypatch):
+    """사용자 조건이 있으면 온통청년 결과를 후보로 표시하고 조건 단서가 있는 항목을 우선한다."""
+    import config.settings as cfg
+    import rag.external_crawler as ext
+
+    monkeypatch.setattr(cfg, "YOUTH_CENTER_API_KEY", "dummy-key")
+    fake_results = [
+        {
+            "title": "전국 청년 문화 지원",
+            "content": "청년 대상 일반 지원사업",
+            "date": "",
+            "url": "https://www.youthcenter.go.kr/a",
+            "source": "온통청년",
+            "category": "policy",
+        },
+        {
+            "title": "인천 대학생 미취업 청년 지원",
+            "content": "인천 거주 대학생 및 미취업 청년 대상 지원사업",
+            "date": "",
+            "url": "https://www.youthcenter.go.kr/b",
+            "source": "온통청년",
+            "category": "policy",
+        },
+    ]
+    monkeypatch.setattr(ext, "fetch_youth_policy", lambda **kw: fake_results)
+
+    result = search_scholarship_policy.invoke({
+        "query": "나는 인천에 사는 대학생이고 아직 취업 안 했어. 내가 받을 수 있는 청년 정책 찾아줘",
+        "n_results": 2,
+    })
+
+    assert "청년정책/장학금 후보" in result
+    assert "실제 신청 가능 여부를 확정하지 않는" in result
+    assert "온통청년 원문 URL" in result
+    assert result.index("인천 대학생 미취업 청년 지원") < result.index("전국 청년 문화 지원")
+    assert "확인 필요 조건" in result
+
+
+def test_search_scholarship_policy_stores_public_api_metadata(monkeypatch):
+    """공공 API 결과를 저장할 때 출처 유형과 자격 확인 여부 metadata를 남긴다."""
+    import chromadb
+    import config.settings as cfg
+    import rag.external_crawler as ext
+
+    monkeypatch.setattr(cfg, "YOUTH_CENTER_API_KEY", "dummy-key")
+    monkeypatch.setattr(ext, "fetch_youth_policy", lambda **kw: [
+        {
+            "title": "인천 청년 주거 지원",
+            "content": "인천 거주 청년 대상 주거 지원",
+            "date": "",
+            "url": "https://www.youthcenter.go.kr/policy",
+            "source": "온통청년",
+            "category": "policy",
+        }
+    ])
+
+    search_scholarship_policy.invoke({
+        "query": "인천 24세 대학생 미취업 청년 주거 지원",
+        "n_results": 1,
+        "region": "인천",
+        "age": "24세",
+        "student_status": "대학생",
+        "employment_status": "미취업",
+    })
+
+    client = chromadb.PersistentClient(path=settings.CHROMA_DB_DIR)
+    collection = client.get_collection(settings.CHROMA_COLLECTION_NAME)
+    stored = collection.get(include=["metadatas"])
+    metadata = stored["metadatas"][0]
+    assert metadata["source_type"] == "public_api"
+    assert metadata["provider"] == "youthcenter"
+    assert metadata["eligibility_checked"] == "false"
+    assert "인천" in metadata["query_context"]
+
+
 def test_search_job_intern_no_api_key(monkeypatch):
     """워크넷 API 키 없을 때 안내 메시지 반환 (에러 없음)."""
     import config.settings as cfg

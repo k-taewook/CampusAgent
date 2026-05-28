@@ -67,6 +67,10 @@ class SimpleTextChunker:
                     "url": doc.get("url", ""),
                     "deadline": doc.get("deadline", ""),
                     "target": doc.get("target", ""),
+                    "source_type": doc.get("source_type", ""),
+                    "provider": doc.get("provider", ""),
+                    "eligibility_checked": doc.get("eligibility_checked", ""),
+                    "query_context": doc.get("query_context", ""),
                     "chunk_index": chunk_idx,
                     "total_chunks": len(chunks),
                 }

@@ -5,6 +5,7 @@ CampusAgent - 대학생 정보 검색 도구 (LangChain Tool)
 """
 import json
 import os
+import re
 import time
 from datetime import datetime
 from typing import Optional
@@ -36,6 +37,25 @@ PERSONALIZED_INTEREST_ALIASES = {
     "contest": "공모전/대외활동",
     "intern": "현장실습/인턴십",
 }
+
+POLICY_PERSONALIZED_TRIGGERS = [
+    "내가 받을 수 있는",
+    "나한테 맞는",
+    "신청 가능한",
+    "받을 수 있는",
+    "지원 가능한",
+    "내 조건",
+]
+
+POLICY_REGION_KEYWORDS = [
+    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+    "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+]
+
+POLICY_STUDENT_KEYWORDS = ["대학생", "재학생", "휴학생", "졸업예정", "졸업생"]
+POLICY_EMPLOYMENT_KEYWORDS = [
+    "미취업", "취업준비", "구직", "재직", "직장인", "취업", "창업", "사업자",
+]
 
 # 실시간 크롤링 결과를 단기 캐싱하여 같은 쿼리 반복 시 서버 부담 완화 (TTL 5분)
 _LIVE_CACHE: dict[str, tuple[float, list[dict]]] = {}
@@ -115,6 +135,103 @@ def _format_result_item(index: int, result: dict) -> str:
         f"   📝 요약: {summary}\n"
         + (f"   🔗 {url}" if url else "")
     )
+
+
+def _is_personalized_policy_query(query: str) -> bool:
+    """청년정책 신청 가능 여부를 묻는 개인화 질의인지 확인합니다."""
+    return any(trigger in query for trigger in POLICY_PERSONALIZED_TRIGGERS)
+
+
+def _extract_policy_context(
+    query: str,
+    region: str = "",
+    age: str = "",
+    employment_status: str = "",
+    student_status: str = "",
+) -> dict:
+    """청년정책 후보 필터링에 쓸 사용자 조건을 간단히 추출합니다."""
+    text = query.strip()
+    inferred_region = region.strip()
+    if not inferred_region:
+        inferred_region = next((kw for kw in POLICY_REGION_KEYWORDS if kw in text), "")
+
+    inferred_age = age.strip()
+    if not inferred_age:
+        match = re.search(r"(\d{2})\s*(세|살)", text)
+        inferred_age = match.group(0).replace(" ", "") if match else ""
+
+    inferred_student = student_status.strip()
+    if not inferred_student:
+        inferred_student = next((kw for kw in POLICY_STUDENT_KEYWORDS if kw in text), "")
+
+    inferred_employment = employment_status.strip()
+    if not inferred_employment:
+        if "취업 안" in text or "취업하지" in text:
+            inferred_employment = "미취업"
+        else:
+            inferred_employment = next((kw for kw in POLICY_EMPLOYMENT_KEYWORDS if kw in text), "")
+
+    return {
+        "region": inferred_region,
+        "age": inferred_age,
+        "student_status": inferred_student,
+        "employment_status": inferred_employment,
+    }
+
+
+def _missing_policy_context(context: dict) -> list[str]:
+    """개인화 청년정책 검색 전 추가 확인이 필요한 조건을 반환합니다."""
+    missing = []
+    if not context["region"]:
+        missing.append("거주 지역")
+    if not context["age"]:
+        missing.append("나이")
+    if not context["student_status"]:
+        missing.append("재학 상태")
+    if not context["employment_status"]:
+        missing.append("취업 상태")
+    return missing
+
+
+def _policy_context_question(query: str, missing: list[str]) -> str:
+    """조건 부족 시 바로 검색하지 않고 확인 질문을 반환합니다."""
+    missing_text = ", ".join(missing)
+    return (
+        f"🔎 '{query}'에 대해 실제 신청 가능성을 보려면 추가 조건이 필요합니다.\n\n"
+        "청년정책은 나이, 거주 지역, 재학 상태, 취업 상태, 소득 조건에 따라 "
+        "신청 가능 여부가 달라집니다. 현재 정보만으로는 확정 추천을 하면 오해가 생길 수 있습니다.\n\n"
+        f"먼저 **{missing_text}**를 알려주세요.\n\n"
+        "예시: `나는 인천에 사는 24세 대학생이고 아직 취업 안 했어. 받을 수 있는 청년 정책 찾아줘.`"
+    )
+
+
+def _rank_policy_candidates(results: list[dict], context: dict) -> list[dict]:
+    """사용자 조건 키워드가 포함된 후보를 위로 올립니다."""
+    terms = [value for value in context.values() if value]
+    if not terms:
+        return results
+
+    ranked = []
+    for idx, item in enumerate(results):
+        haystack = " ".join(
+            [
+                item.get("title", ""),
+                item.get("content", ""),
+                item.get("source", ""),
+            ]
+        )
+        score = sum(1 for term in terms if term and term in haystack)
+        copied = dict(item)
+        copied["_condition_score"] = score
+        copied["_eligibility_note"] = (
+            "입력한 조건 일부가 정책명/요약/기관 정보에 포함되어 있습니다."
+            if score
+            else "입력한 조건과 직접 일치하는 단서는 결과 요약에서 확인되지 않았습니다."
+        )
+        ranked.append((score, idx, copied))
+
+    ranked.sort(key=lambda row: (-row[0], row[1]))
+    return [item for _, _, item in ranked]
 
 
 def _normalize_interests(interests: str) -> list[str]:
@@ -614,6 +731,10 @@ def _store_external_results(results: list[dict], label: str) -> None:
             "url": item.get("url", ""),
             "deadline": item.get("date", ""),
             "target": "대학생",
+            "source_type": item.get("source_type", "public_api"),
+            "provider": item.get("provider", label),
+            "eligibility_checked": item.get("eligibility_checked", "false"),
+            "query_context": item.get("query_context", ""),
             "full_text": f"[{STUDENT_INFO_CATEGORIES.get(cat, cat)}] {title}\n{content}",
         })
     chunker = SimpleTextChunker(chunk_size=500, chunk_overlap=50)
@@ -633,11 +754,18 @@ def _format_external_items(results: list[dict], n_results: int) -> list[str]:
         cat_label = STUDENT_INFO_CATEGORIES.get(cat, cat or "분류 없음")
         source = item.get("source", "")
         deadline = item.get("date", "마감일 정보 없음") or "마감일 정보 없음"
+        eligibility_note = item.get("_eligibility_note", "")
+        eligibility_line = (
+            f"   ⚠️ 확인 필요 조건: {eligibility_note}\n"
+            if eligibility_note
+            else ""
+        )
         lines.append(
             f"📌 **{i}. {item.get('title', '제목 없음')}**\n"
             f"   📂 분류: {cat_label}\n"
             f"   📅 마감/기간: {deadline}\n"
             f"   🏛️ 출처: {source}\n"
+            f"{eligibility_line}"
             f"   📝 요약: {summary}\n"
             + (f"   🔗 {url}" if url else "")
         )
@@ -683,7 +811,14 @@ def search_transfer_by_school(school_name: str, n_results: int = 5) -> str:
 
 
 @tool
-def search_scholarship_policy(query: str, n_results: int = 5) -> str:
+def search_scholarship_policy(
+    query: str,
+    n_results: int = 5,
+    region: str = "",
+    age: str = "",
+    employment_status: str = "",
+    student_status: str = "",
+) -> str:
     """
     온통청년 API로 국가장학금·청년지원 정책을 검색합니다.
     사용자가 "최신 장학금 알려줘", "청년 정책 뭐 있어?" 처럼 외부 장학/정책 정보를 요청할 때 사용하세요.
@@ -692,6 +827,10 @@ def search_scholarship_policy(query: str, n_results: int = 5) -> str:
     Args:
         query: 검색 키워드 (예: "국가장학금", "청년 주거 지원", "학자금대출")
         n_results: 반환할 최대 결과 수
+        region: 거주 지역 (선택)
+        age: 나이 또는 연령대 (선택)
+        employment_status: 취업 상태 (선택)
+        student_status: 재학 상태 (선택)
 
     Returns:
         청년정책 검색 결과 문자열
@@ -699,6 +838,18 @@ def search_scholarship_policy(query: str, n_results: int = 5) -> str:
     try:
         from config.settings import YOUTH_CENTER_API_KEY
         from rag.external_crawler import fetch_youth_policy
+
+        context = _extract_policy_context(
+            query=query,
+            region=region,
+            age=age,
+            employment_status=employment_status,
+            student_status=student_status,
+        )
+        if _is_personalized_policy_query(query):
+            missing = _missing_policy_context(context)
+            if len(missing) >= 2:
+                return _policy_context_question(query, missing)
 
         if not YOUTH_CENTER_API_KEY:
             return (
@@ -716,17 +867,42 @@ def search_scholarship_policy(query: str, n_results: int = 5) -> str:
                 f"🔍 '{query}' 관련 청년정책을 찾지 못했습니다.\n\n"
                 "온통청년(https://www.youthcenter.go.kr)에서 직접 검색해보세요."
             )
+        for item in results:
+            item["source_type"] = "public_api"
+            item["provider"] = "youthcenter"
+            item["eligibility_checked"] = "false"
+            item["query_context"] = query
+        results = _rank_policy_candidates(results, context)
         _store_external_results(results, "policy")
         items = _format_external_items(results, n_results)
+        context_parts = [
+            f"{label}: {value}"
+            for label, value in [
+                ("지역", context["region"]),
+                ("나이", context["age"]),
+                ("재학 상태", context["student_status"]),
+                ("취업 상태", context["employment_status"]),
+            ]
+            if value
+        ]
+        context_line = (
+            f"   반영한 사용자 조건: {', '.join(context_parts)}\n"
+            if context_parts
+            else ""
+        )
         header = (
-            f"🏛️ **'{query}' 관련 청년정책/장학금** (온통청년 기준)\n"
+            f"🏛️ **'{query}' 관련 청년정책/장학금 후보** (온통청년 기준)\n"
             f"   수집 {len(results)}건\n"
+            f"{context_line}"
             f"{'─' * 40}\n\n"
+            "이 결과는 실제 신청 가능 여부를 확정하지 않는 조건 확인용 후보입니다.\n"
+            "나이, 거주 지역, 소득, 취업 상태, 재학 상태에 따라 실제 신청 가능 여부가 달라질 수 있습니다.\n\n"
         )
         footer = (
             "\n\n💡 **다음 추천 행동**\n"
             "- 신청 기간이 있는 항목은 캘린더나 과제로 등록할 수 있습니다.\n"
-            "- 정확한 신청 조건은 반드시 출처 URL에서 재확인하세요."
+            "- 결과가 넓게 잡힐 수 있으므로 정확한 신청 조건은 반드시 온통청년 원문 URL에서 재확인하세요.\n"
+            "- 소득 구간이나 세부 자격 조건이 필요한 정책은 원문 공고의 신청 자격을 우선 기준으로 판단하세요."
         )
         return header + "\n\n".join(items) + footer
     except Exception as e:

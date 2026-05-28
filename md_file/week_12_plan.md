@@ -281,15 +281,48 @@ CampusAgent의 청년 정책 검색 기능은 공공 API와 공식 웹사이트�
 
 ## 11. 12주차 완료 기준
 
-- [ ] 청년 정책 검색 결과가 이상하게 나오는 원인을 문서화한다.
-- [ ] 완전 해결이 어려운 이유를 사용자 조건 부족과 공공 데이터 한계로 구분해 정리한다.
-- [ ] 12주차 최소 보완 작업 범위를 정한다.
-- [ ] 최종 발표에서 이 기능을 과장하지 않고 설명할 수 있는 문구를 준비한다.
-- [ ] 가능하면 프롬프트와 응답 문구를 수정해 "확정 추천" 오해를 줄인다.
+- [x] 청년 정책 검색 결과가 이상하게 나오는 원인을 문서화한다.
+- [x] 완전 해결이 어려운 이유를 사용자 조건 부족과 공공 데이터 한계로 구분해 정리한다.
+- [x] 12주차 최소 보완 작업 범위를 정한다.
+- [x] 최종 발표에서 이 기능을 과장하지 않고 설명할 수 있는 문구를 준비한다.
+- [x] 가능하면 프롬프트와 응답 문구를 수정해 "확정 추천" 오해를 줄인다.
 
 ---
 
-## 12. 요약
+## 12. 구현 반영 결과
+
+2026-05-29 기준으로 12주차 보완 계획 중 최소 작업과 일부 선택 작업을 실제 코드에 반영했다.
+
+반영한 내용은 다음과 같다.
+
+- `agent/prompts.py`에 청년 정책 개인화 검색 전 확인 질문 규칙을 추가했다.
+- 사용자가 "내가 받을 수 있는", "나한테 맞는", "신청 가능한" 청년정책을 요청하면 나이, 거주 지역, 재학 상태, 취업 상태를 먼저 확인하도록 했다.
+- 조건이 이미 포함된 경우 `search_scholarship_policy`에 `region`, `age`, `student_status`, `employment_status` 인자를 전달하도록 안내했다.
+- `mcp_servers/student_info_server.py`의 `search_scholarship_policy()`에 선택 인자를 추가했다.
+- 조건이 부족한 개인화 정책 요청은 바로 검색하지 않고 확인 질문을 반환하도록 했다.
+- 온통청년 결과는 "신청 가능 확정"이 아니라 "청년정책/장학금 후보"로 표시하도록 응답 문구를 수정했다.
+- 입력 조건과 정책명, 요약, 기관 정보가 일부 일치하는 결과를 위로 올리는 간단한 rerank 로직을 추가했다.
+- 각 결과에 "확인 필요 조건" 문구를 표시해 사용자가 원문 조건을 확인해야 함을 분명히 했다.
+- 외부 공공 API 결과 저장 시 `source_type`, `provider`, `eligibility_checked`, `query_context` metadata를 함께 저장하도록 했다.
+- `rag/chunker.py`, `rag/embedder.py`, `rag/retriever.py`에서 새 metadata를 유지하도록 보강했다.
+- `tests/test_student_info.py`에 조건 부족 안내, 조건 기반 rerank, 공공 API metadata 저장 테스트를 추가했다.
+
+검증 결과는 다음과 같다.
+
+```powershell
+.\venv\Scripts\python.exe -m pytest tests/test_student_info.py -q
+# 14 passed
+
+.\venv\Scripts\python.exe -m pytest tests/test_agent.py -q
+# 3 passed
+
+.\venv\Scripts\python.exe -m py_compile mcp_servers\student_info_server.py agent\prompts.py rag\chunker.py rag\embedder.py rag\retriever.py
+# 통과
+```
+
+---
+
+## 13. 요약
 
 공공 API와 공공 웹사이트 기반 검색이 이상한 정보를 가져오는 문제는 단순한 버그 하나로 보기 어렵다.
 검색어가 넓고, 사용자 조건이 부족하며, 공공 데이터의 자격 조건이 완전히 구조화되어 있지 않기 때문이다.
