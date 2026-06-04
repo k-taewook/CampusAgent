@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 Codex and other coding agents working in this repository should follow these repository-specific guidelines. Apply them together with higher-priority system, developer, tool, and user instructions.
 
