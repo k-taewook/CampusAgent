@@ -19,6 +19,7 @@ from database.db import (
     update_subtask_status,
     delete_assignment,
     get_upcoming_assignments,
+    get_schedules_by_date_range,
 )
 from database.models import AssignmentCreate, AssignmentStatus, SubtaskCreate
 
@@ -382,22 +383,47 @@ def delete_task(assignment_id: int) -> str:
 @tool
 def get_upcoming_deadlines(days: int = 7) -> str:
     """
-    마감이 임박한 과제를 조회합니다.
+    마감이 임박한 과제와 해당 기간의 캘린더 일정을 함께 조회합니다.
 
     Args:
-        days: 며칠 이내의 과제를 조회할지 (기본값: 7일)
+        days: 며칠 이내를 조회할지 (기본값: 7일)
 
     Returns:
-        마감 임박 과제 목록 문자열
+        마감 임박 과제 + 캘린더 일정 목록 문자열
     """
     try:
-        assignments = get_upcoming_assignments(days=days)
-        if not assignments:
-            return f"🎉 {days}일 이내에 마감인 과제가 없습니다!"
+        today = datetime.now()
+        end_date = (today + timedelta(days=days)).strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
 
-        header = f"⏰ **{days}일 이내 마감 과제** (총 {len(assignments)}건)\n{'─' * 30}\n\n"
-        items = "\n\n".join(a.to_display_string() for a in assignments)
-        return header + items
+        all_assignments = get_upcoming_assignments(days=days, include_done=True)
+        pending = [a for a in all_assignments if a.status.value != "done"]
+        done = [a for a in all_assignments if a.status.value == "done"]
+        schedules = get_schedules_by_date_range(today_str, end_date)
+
+        parts = []
+
+        if pending:
+            header = f"⏰ **{days}일 이내 마감 과제** (총 {len(pending)}건)\n{'─' * 30}\n"
+            items = "\n".join(a.to_display_string() for a in pending)
+            parts.append(header + items)
+        else:
+            parts.append(f"🎉 {days}일 이내에 미완료 과제가 없습니다!")
+
+        if done:
+            done_lines = "\n".join(f"  ✅ {a.due_date} [{a.course_name}] {a.title}" for a in done)
+            parts.append(f"\n✅ **같은 기간 완료된 과제** (총 {len(done)}건)\n{'─' * 30}\n{done_lines}")
+
+        if schedules:
+            sched_lines = []
+            for s in schedules:
+                time_str = f" {s.start_time}" if s.start_time else ""
+                sched_lines.append(f"  • {s.date}{time_str} [{s.category}] {s.title}")
+            parts.append(f"\n📅 **같은 기간 캘린더 일정** (총 {len(schedules)}건)\n{'─' * 30}\n" + "\n".join(sched_lines))
+        else:
+            parts.append(f"\n📅 {days}일 이내 캘린더 일정도 없습니다.")
+
+        return "\n".join(parts)
     except Exception as e:
         return f"❌ 조회 실패: {e}"
 

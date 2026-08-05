@@ -2,7 +2,7 @@
 CampusAgent 환경 설정 모듈
 - dotenv 기반 환경변수 로딩
 - LLM / DB / ChromaDB 등 전역 상수 관리
-- OpenAI / Gemini 양쪽 지원
+- OpenAI / Gemini / Claude(Anthropic) 지원
 """
 import os
 from dotenv import load_dotenv
@@ -10,12 +10,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ──────────────────────────────────────
-# LLM 설정 (OpenAI 또는 Gemini 자동 감지)
+# LLM 설정 (OpenAI / Gemini / Claude 자동 감지)
 # ──────────────────────────────────────
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
-# LLM_PROVIDER: "gemini" | "openai" | "none" (자동 감지)
+# LLM_PROVIDER: "claude" | "gemini" | "openai" | "none" (자동 감지)
 LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "auto")
 
 # 모델명 (기본값은 provider에 따라 다름)
@@ -27,6 +28,8 @@ def _detect_provider() -> str:
     """사용 가능한 LLM provider 자동 감지"""
     if LLM_PROVIDER != "auto":
         return LLM_PROVIDER
+    if ANTHROPIC_API_KEY:
+        return "claude"
     if GOOGLE_API_KEY:
         return "gemini"
     if OPENAI_API_KEY:
@@ -44,7 +47,9 @@ def get_llm_model() -> str:
     if LLM_MODEL:
         return LLM_MODEL
     provider = _detect_provider()
-    if provider == "gemini":
+    if provider == "claude":
+        return "claude-opus-4-8"
+    elif provider == "gemini":
         return "gemini-2.5-flash"
     elif provider == "openai":
         return "gpt-3.5-turbo"

@@ -998,6 +998,48 @@ def search_contest_external(query: str, n_results: int = 5) -> str:
         return f"❌ K-스타트업 공모전 검색 실패: {e}"
 
 
+@tool
+def search_wevity_contest(query: str = "", n_results: int = 8) -> str:
+    """
+    위티(wevity.com)에서 대학생 공모전·대외활동을 실시간 크롤링합니다.
+    사용자가 "공모전 추천해줘", "대외활동 찾아줘", "AI 공모전 알려줘", "SW 공모전" 처럼
+    대학생 공모전·대외활동 정보를 요청하면 사용하세요.
+    K-스타트업과 달리 일반 대학생 대상 공모전·해커톤·대외활동이 중심입니다.
+
+    Args:
+        query: 검색 키워드 (예: "AI", "소프트웨어", "해커톤", "" 전체 목록)
+        n_results: 반환할 최대 결과 수
+
+    Returns:
+        공모전/대외활동 검색 결과 문자열
+    """
+    try:
+        from rag.external_crawler import crawl_wevity_contest
+        results = crawl_wevity_contest(query=query, max_results=n_results)
+        if not results:
+            return (
+                "🔍 위티에서 공모전 정보를 가져오지 못했습니다.\n\n"
+                "위티(https://www.wevity.com)에서 직접 검색해보세요.\n"
+                "또는 저장된 공모전 샘플 데이터를 로드해서 검색할 수 있습니다."
+            )
+        _store_external_results(results, "contest")
+        items = _format_external_items(results, n_results)
+        label = f"'{query}' " if query else ""
+        header = (
+            f"🏆 **{label}대학생 공모전·대외활동** (위티 실시간)\n"
+            f"   수집 {len(results)}건\n"
+            f"{'─' * 40}\n\n"
+        )
+        footer = (
+            "\n\n💡 **다음 추천 행동**\n"
+            "- 마감일을 캘린더나 과제로 등록할 수 있습니다.\n"
+            "- 정확한 지원 조건은 위티(wevity.com) 원문에서 확인하세요."
+        )
+        return header + "\n\n".join(items) + footer
+    except Exception as e:
+        return f"❌ 위티 공모전 검색 실패: {e}"
+
+
 STUDENT_INFO_TOOLS = [
     search_student_info,
     search_personalized_student_info,
@@ -1006,6 +1048,7 @@ STUDENT_INFO_TOOLS = [
     search_scholarship_policy,
     search_job_intern,
     search_contest_external,
+    search_wevity_contest,
     load_student_info_data,
     get_student_info_stats,
 ]

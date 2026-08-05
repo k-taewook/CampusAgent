@@ -21,6 +21,7 @@ DEFAULT_HEADERS = {
 
 ADIGA_BASE = "https://www.adiga.kr"
 KSTARTUP_BASE = "https://www.k-startup.go.kr"
+WEVITY_BASE = "https://www.wevity.com"
 
 
 # ──────────────────────────────────────────────────
@@ -333,6 +334,82 @@ def crawl_kstartup_contest(query: str = "", max_results: int = 5) -> list[dict]:
             "date": deadline,
             "url": detail_url,
             "source": f"K-스타트업 ({institution})" if institution else "K-스타트업(k-startup.go.kr)",
+            "category": "contest",
+        })
+
+        if len(results) >= max_results:
+            break
+
+    return results
+
+
+# ──────────────────────────────────────────────────
+# 5. 위티(wevity.com) 대학생 공모전/대외활동
+# ──────────────────────────────────────────────────
+
+WEVITY_LIST_URL = f"{WEVITY_BASE}/?c=find&s=1&gub=1"
+
+
+def crawl_wevity_contest(query: str = "", max_results: int = 8) -> list[dict]:
+    """
+    위티(wevity.com)에서 대학생 공모전·대외활동 목록을 크롤링합니다.
+    query가 있으면 제목 포함 여부로 클라이언트 사이드 필터링합니다.
+    """
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
+
+    try:
+        resp = session.get(WEVITY_LIST_URL, timeout=15)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return []
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    results = []
+
+    # ul.list > li (top 헤더 행 제외)
+    items = [li for li in soup.select("ul.list > li") if "top" not in li.get("class", [])]
+
+    for item in items:
+        # 제목: .tit > a
+        link_tag = item.select_one(".tit a")
+        if not link_tag:
+            continue
+        title = link_tag.get_text(separator=" ", strip=True)
+        # 상태 스팬 텍스트 제거 (신규, SPECIAL 등)
+        for span in link_tag.select("span.stat"):
+            title = title.replace(span.get_text(strip=True), "").strip()
+
+        if not title or len(title) < 4:
+            continue
+        if query and query.lower() not in title.lower():
+            continue
+
+        href = link_tag.get("href", "")
+        url = href if href.startswith("http") else f"{WEVITY_BASE}/{href.lstrip('/?')}"
+        if not href.startswith("http"):
+            url = f"{WEVITY_BASE}/?{href.lstrip('?')}" if href.startswith("?") else f"{WEVITY_BASE}/{href}"
+
+        # 분야
+        sub_tit = item.select_one(".sub-tit")
+        field = sub_tit.get_text(strip=True) if sub_tit else ""
+
+        # 주최사
+        organ = item.select_one(".organ")
+        host = organ.get_text(strip=True) if organ else ""
+
+        # 마감 (D-day)
+        day_tag = item.select_one(".day")
+        deadline = day_tag.get_text(separator=" ", strip=True) if day_tag else ""
+
+        content = f"주최: {host}\n{field}\n마감: {deadline}\n상세 내용은 출처 URL에서 확인하세요."
+
+        results.append({
+            "title": title,
+            "content": content,
+            "date": deadline,
+            "url": url,
+            "source": f"위티 ({host})" if host else "위티(wevity.com)",
             "category": "contest",
         })
 

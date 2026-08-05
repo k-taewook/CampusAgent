@@ -1,7 +1,7 @@
 """
 CampusAgent LangGraph 에이전트 그래프
 - LLM + 전체 Tool 바인딩 (Task + Calendar + RAG)
-- OpenAI / Gemini 자동 감지
+- Claude(Anthropic) / Gemini / OpenAI 자동 감지
 - agent → should_continue → tools → agent 순환 구조
 - MemorySaver를 통한 대화 기록 유지
 """
@@ -31,7 +31,14 @@ def _create_llm():
     provider = get_llm_provider()
     model_name = get_llm_model()
 
-    if provider == "gemini":
+    if provider == "claude":
+        from langchain_anthropic import ChatAnthropic
+        # Claude Opus 4.7/4.8은 temperature 파라미터를 지원하지 않으므로 전달하지 않음
+        return ChatAnthropic(
+            model=model_name,
+            max_retries=4,
+        )
+    elif provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(
             model=model_name,
@@ -55,7 +62,7 @@ def build_graph():
     builder = StateGraph(AgentState)
     memory = MemorySaver()
 
-    # ── 2. LLM 모델 초기화 (Gemini / OpenAI 자동 감지) ──
+    # ── 2. LLM 모델 초기화 (Claude / Gemini / OpenAI 자동 감지) ──
     model = None
     provider = get_llm_provider()
     model_name = get_llm_model()
@@ -106,7 +113,9 @@ def build_graph():
                 content=(
                     "⚠️ LLM API 키가 설정되지 않았습니다.\n\n"
                     "`.env` 파일에 다음 중 하나를 추가해주세요:\n\n"
-                    "**Gemini (권장):**\n"
+                    "**Claude (권장):**\n"
+                    "```\nANTHROPIC_API_KEY=sk-ant-your-key-here\n```\n\n"
+                    "**Gemini:**\n"
                     "```\nGOOGLE_API_KEY=your-gemini-api-key\n```\n\n"
                     "**OpenAI:**\n"
                     "```\nOPENAI_API_KEY=sk-your-key-here\n```\n\n"

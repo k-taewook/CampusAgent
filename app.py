@@ -21,6 +21,7 @@ from database.db import (
     load_recent_conversation_messages,
     save_conversation_message,
     get_latest_memory_summary,
+    clear_conversation_history,
 )
 from rag.retriever import init_chromadb, get_notice_count
 from collections import defaultdict
@@ -56,10 +57,11 @@ def _format_chat_error(error: Exception) -> str:
         or "unavailable" in normalized
         or "high demand" in normalized
         or "overloaded" in normalized
+        or "overload" in normalized
     )
     if temporary_llm_unavailable:
         return (
-            "⚠️ Gemini 모델이 현재 일시적으로 혼잡해서 요청을 처리하지 못했습니다.\n\n"
+            "⚠️ LLM 모델이 현재 일시적으로 혼잡해서 요청을 처리하지 못했습니다.\n\n"
             "잠시 후 같은 요청을 다시 보내주세요. 과제나 일정이 실제로 등록됐는지 애매하면 "
             "대시보드에서 한 번 확인해주세요."
         )
@@ -123,11 +125,11 @@ with st.sidebar:
     if is_llm_available():
         provider = get_llm_provider()
         model_name = get_llm_model()
-        provider_label = "Gemini" if provider == "gemini" else "OpenAI"
+        provider_label = {"claude": "Claude", "gemini": "Gemini", "openai": "OpenAI"}.get(provider, provider)
         st.success(f"✅ {provider_label} 연결됨 ({model_name})", icon="🤖")
     else:
         st.warning("⚠️ LLM API 키 미설정", icon="🔑")
-        st.caption("`.env`에 `GOOGLE_API_KEY` 또는 `OPENAI_API_KEY`를 추가해주세요.")
+        st.caption("`.env`에 `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, 또는 `OPENAI_API_KEY`를 추가해주세요.")
 
     st.divider()
 
@@ -321,14 +323,36 @@ with tab_chat:
                                         last_msg_content = last_message.content
 
                         if isinstance(last_msg_content, list):
-                            # Gemini 등 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
+                            # 일부 모델이 텍스트를 [{"type": "text", "text": "..."}] 구조로 반환할 때의 처리
+                            # tool_use 블록은 제외하고 text 블록만 추출
                             parsed_text = ""
                             for item in last_msg_content:
-                                if isinstance(item, dict) and "text" in item:
-                                    parsed_text += item["text"]
+                                if isinstance(item, dict):
+                                    if item.get("type") == "tool_use":
+                                        continue
+                                    if "text" in item:
+                                        parsed_text += item["text"]
                                 elif isinstance(item, str):
                                     parsed_text += item
                             last_msg_content = parsed_text
+
+                        # Claude가 XML 형식의 도구 호출 텍스트를 출력하는 경우 제거
+                        if isinstance(last_msg_content, str) and "<invoke" in last_msg_content:
+                            import re as _re
+                            # "call <invoke ...>...</invoke> <invoke ...>...</invoke>" 패턴 전체 제거
+                            last_msg_content = _re.sub(
+                                r"call\s*(?:<invoke[^>]*>.*?</invoke>\s*)+",
+                                "",
+                                last_msg_content,
+                                flags=_re.DOTALL,
+                            )
+                            # 남은 단독 <invoke>...</invoke> 블록도 제거
+                            last_msg_content = _re.sub(
+                                r"<invoke[^>]*>.*?</invoke>",
+                                "",
+                                last_msg_content,
+                                flags=_re.DOTALL,
+                            ).strip()
 
                         if last_msg_content:
                             st.markdown(last_msg_content)
@@ -711,7 +735,7 @@ with tab_settings:
         notify_days = st.number_input("⏰ 마감(D-Day) 알림 기준일", min_value=1, max_value=14, value=current_notify)
         
         current_llm = get_user_setting("llm_pref", "Auto")
-        llm_options = ["Auto", "Gemini", "OpenAI"]
+        llm_options = ["Auto", "Claude", "Gemini", "OpenAI"]
         llm_idx = llm_options.index(current_llm) if current_llm in llm_options else 0
         llm_pref = st.selectbox("🤖 선호 LLM 엔진", llm_options, index=llm_idx, disabled=True, help="기존 .env 로직에 의해 자동감지 중입니다.")
         
@@ -736,3 +760,15 @@ with tab_settings:
         if st.button("내 정보에 맞는 대학 정보 추천받기", use_container_width=True):
             st.session_state.quick_prompt = "내 설정 정보를 바탕으로 나에게 맞는 대학 정보 추천해줘."
             st.rerun()
+
+    st.divider()
+    st.markdown("#### 🗑️ 대화 기록 초기화")
+    st.caption("저장된 대화 내역과 장기기억 요약을 모두 삭제합니다.")
+    if st.button("대화 기록 전체 삭제", type="secondary", use_container_width=True):
+        clear_conversation_history(CONVERSATION_SESSION_ID)
+        st.session_state.messages = []
+        st.session_state.graph_memory_hydrated = True
+        if "graph" in st.session_state:
+            del st.session_state["graph"]
+        st.success("대화 기록이 초기화되었습니다. 챗봇 탭으로 이동하면 새 대화를 시작할 수 있습니다.")
+        st.rerun()

@@ -64,5 +64,82 @@
     "url": "https://www.work.go.kr",
     "deadline": "기관별 모집 마감일 확인",
     "target": "현장실습 및 인턴십 희망 대학생"
+  },
+  {
+    "id": "student_contest_2",
+    "title": "공공데이터 활용 창업경진대회 (행정안전부·한국지능정보사회진흥원)",
+    "content": "공공데이터포털(data.go.kr)에서 제공하는 데이터를 활용해 서비스·앱·AI 솔루션을 개발하는 경진대회. IT·SW·AI 전공 대학생 팀 지원 가능. 서비스 기획서, 구현 결과물, 발표 자료 제출. 수상팀에 창업 지원금 및 멘토링 제공.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "공공데이터포털",
+    "url": "https://www.data.go.kr",
+    "deadline": "2026-08-31",
+    "target": "IT/AI/SW 전공 대학생 팀"
+  },
+  {
+    "id": "student_contest_3",
+    "title": "삼성 주니어 소프트웨어 창작대회 (대학생부)",
+    "content": "삼성전자가 주관하는 소프트웨어 창작 경진대회. 대학생 개인 또는 팀이 사회문제 해결 아이디어를 소프트웨어로 구현해 출품. 앱, 웹, AI 솔루션 등 다양한 형태 허용. 수상자에게 장학금 및 삼성 인턴십 연계 기회 제공.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "삼성전자 주니어 소프트웨어 창작대회",
+    "url": "https://www.juniorsw.com",
+    "deadline": "2026-09-30",
+    "target": "대학교 재학생 (1~4학년)"
+  },
+  {
+    "id": "student_contest_4",
+    "title": "SW중심대학 공동해커톤 (과학기술정보통신부)",
+    "content": "과기정통부 주관 전국 SW중심대학 연합 해커톤. 48시간 집중 개발 방식. AI, 빅데이터, 클라우드, IoT 분야 주제 제시. 팀 구성 3~5인. 우수팀에 장관상, 상금, 취업 연계 제공. 전공심화 학점 인정 가능.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "SW중심대학 사업단",
+    "url": "https://www.swuniv.kr",
+    "deadline": "2026-10-15",
+    "target": "SW 관련 전공 대학생"
+  },
+  {
+    "id": "student_contest_5",
+    "title": "카카오 인턴십 (Kakao Technical Internship)",
+    "content": "카카오에서 운영하는 대학생 기술 인턴십 프로그램. 백엔드, 프론트엔드, AI/ML, 데이터 엔지니어링 분야. 서류 → 코딩 테스트 → 기술 면접 순서. 인턴 기간 중 실무 프로젝트 참여. 우수 인턴에게 정규직 전환 기회 제공. 방학 기간 진행.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "카카오 채용 페이지",
+    "url": "https://careers.kakao.com",
+    "deadline": "2026-07-31",
+    "target": "IT/AI/SW 관련 전공 대학생 (졸업예정자 포함)"
+  },
+  {
+    "id": "student_contest_6",
+    "title": "네이버 AI 해커톤 (NAVER AI Hackathon)",
+    "content": "네이버가 주관하는 AI 기술 해커톤. 자연어처리, 이미지 인식, 추천 시스템 등 AI 실전 문제 제공. 개인 또는 팀 참가. CLOVA, HyperCLOVA X 등 네이버 AI 플랫폼 사용 가능. 수상자에게 상금 및 네이버 인턴십 우대 혜택 제공.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "NAVER Developers",
+    "url": "https://developers.naver.com",
+    "deadline": "2026-09-15",
+    "target": "AI/ML 관심 대학생 및 대학원생"
+  },
+  {
+    "id": "student_contest_7",
+    "title": "현장실습 참여 방법 (학교 연계 인턴십)",
+    "content": "학교 현장실습지원센터를 통해 기업 인턴십을 학점으로 인정받을 수 있다. IT 기업 현장실습은 보통 방학 중 4~8주 진행. 지원 절차: 학과 공지 확인 → 기업 선택 → 서류 제출 → 협약 체결 → 실습 수행 → 결과 보고서 제출. 실습비는 기업별 상이.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "학교 현장실습지원센터",
+    "url": "https://www.inhatc.ac.kr",
+    "deadline": "학기별 신청 기간 확인",
+    "target": "현장실습 학점 이수 희망 학생"
+  },
+  {
+    "id": "student_contest_8",
+    "title": "대학생 AI 경진대회 (한국인공지능협회)",
+    "content": "한국인공지능협회 주관 대학생 AI 프로젝트 경진대회. 딥러닝, 머신러닝, 자연어처리 분야 프로젝트 출품. GitHub 코드 제출 필수. 1~3인 팀 구성. 수상팀에 장학금, AI 교육 지원, 기업 연계 기회 제공. IT 취업 포트폴리오로 활용 가능.",
+    "date": "2026-06-01",
+    "category": "contest",
+    "source": "한국인공지능협회",
+    "url": "https://www.koaia.or.kr",
+    "deadline": "2026-11-30",
+    "target": "AI/머신러닝 관심 대학생"
   }
 ]

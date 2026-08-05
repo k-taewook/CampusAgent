@@ -368,21 +368,26 @@ def delete_assignment(assignment_id: int) -> bool:
     return deleted
 
 
-def get_upcoming_assignments(days: int = 7) -> List[Assignment]:
+def get_upcoming_assignments(days: int = 7, include_done: bool = False) -> List[Assignment]:
     """마감 임박 과제 조회 (기본 7일 이내)"""
     conn = _get_connection()
     now = datetime.now().strftime("%Y-%m-%d")
     future = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
 
-    rows = conn.execute(
-        """
+    query = """
         SELECT * FROM assignments
         WHERE due_date BETWEEN ? AND ?
-          AND status != 'done'
         ORDER BY due_date ASC
-        """,
-        (now, future),
-    ).fetchall()
+    """
+    if not include_done:
+        query = """
+            SELECT * FROM assignments
+            WHERE due_date BETWEEN ? AND ?
+              AND status != 'done'
+            ORDER BY due_date ASC
+        """
+
+    rows = conn.execute(query, (now, future)).fetchall()
     conn.close()
     return [_row_to_assignment(r) for r in rows]
 
