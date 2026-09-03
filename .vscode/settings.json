@@ -1,4 +1,0 @@
-{
-  "python.terminal.activateEnvironment": false,
-  "python.defaultInterpreterPath": "${workspaceFolder}\\venv\\Scripts\\python.exe"
-}

@@ -1,0 +1,24 @@
+# ── secrets ──
+.env
+.env.*
+!.env.example
+
+# ── python ──
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ── node ──
+node_modules/
+paper_assets/node_modules/
+
+# ── local data / generated ──
+*.db
+*.sqlite3
+chroma_db_storage/
+
+# ── editor / tooling ──
+.claude/
+.vscode/
