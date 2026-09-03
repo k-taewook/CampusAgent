@@ -22,3 +22,7 @@ chroma_db_storage/
 # ── editor / tooling ──
 .claude/
 .vscode/
+
+# ── 개인 작업용 폴더 (공개 불필요) ──
+md_file/
+paper_assets/
